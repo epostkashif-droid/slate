@@ -1,0 +1,9 @@
+# build outputs
+*.apk
+*.apks
+*.aab
+*.idsig
+# signing keys never belong in git
+*.jks
+*.keystore
+signing/

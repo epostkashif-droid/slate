@@ -1,0 +1,62 @@
+// Representative SMS samples (invented values, real-world layouts). Also used as demo data in a browser.
+(function (root) {
+  var S = [
+    // ---- ICICI ----
+    { a: 'AX-ICICIB-S', b: 'ICICI Bank Acct XX123 debited for Rs 250.00 on 12-Nov-26; ZOMATO credited. UPI:431234567890. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766.',
+      x: { kind: 'txn', dir: 'debit', amount: 250, acctType: 'savings', last4: '123', bank: 'ICICI', merchant: 'Zomato', category: 'Food & Dining', mode: 'UPI' } },
+    { a: 'VM-ICICIB', b: 'Dear Customer, Acct XX123 is credited with Rs 5000.00 on 12-Nov-26 from RAHUL KUMAR. UPI:123456789012-ICICI Bank.',
+      x: { kind: 'txn', dir: 'credit', amount: 5000, acctType: 'savings', merchant: 'Rahul Kumar', category: 'Uncategorised', needsReview: true } },
+    { a: 'JD-ICICIT-S', b: 'ICICI Bank Acct XX123 credited:Rs. 1,85,000.00 on 30-Oct-26. Info NEFT-AUTODESK INDIA PVT LTD. Available Balance is Rs. 2,20,000.00.',
+      x: { kind: 'txn', dir: 'credit', amount: 185000, category: 'Salary & Income', mode: 'NEFT', balance: 220000 } },
+    { a: 'AD-ICICIB', b: 'INR 1,299.00 spent using ICICI Bank Card XX4005 on 11-Nov-26 on AMAZON PAY IN. Avl Limit: INR 2,10,000.00. If not you, call 1800 2662/SMS BLOCK 4005 to 9215676766.',
+      x: { kind: 'txn', dir: 'debit', amount: 1299, acctType: 'credit_card', last4: '4005', merchant: 'Amazon Pay In', category: 'Shopping', mode: 'Card' } },
+    { a: 'AD-ICICIB', b: 'ICICI Bank Acc XX123 debited Rs. 5,000.00 on 05-Nov-26 InfoACH*HDFCLTD*000123. Avl Bal Rs. 45,000.00. To dispute call 18002662',
+      x: { kind: 'txn', dir: 'debit', amount: 5000, acctType: 'savings', category: 'EMI & Loans', auto: true, balance: 45000 } },
+    { a: 'AD-ICICIB', b: 'Payment of Rs 15,000.00 has been received on your ICICI Bank Credit Card XX4005 through Bharat Bill Payment System on 08-NOV-26.',
+      x: { kind: 'txn', dir: 'credit', amount: 15000, acctType: 'credit_card', last4: '4005', category: 'Card bill payment' } },
+    { a: 'AD-ICICIB', b: 'ICICI Bank Credit Card XX4005 Statement is sent to ka****@gmail.com. Total of Rs 23,456.00 or minimum of Rs 1,170.00 is due by 25-NOV-26.',
+      x: { kind: 'reminder', rkind: 'bill_due', amount: 23456, hasDue: true } },
+    { a: 'AD-ICICIB', b: 'Rs 649.00 debited from ICICI Bank Card XX4005 on 01-Nov-26 for NETFLIX AutoPay. Avl Limit: INR 2,05,000.00.',
+      x: { kind: 'txn', dir: 'debit', amount: 649, acctType: 'credit_card', merchant: 'Netflix', category: 'Entertainment', auto: true } },
+    { a: 'AD-ICICIB', b: 'Dear Customer, Rs 649.00 will be debited from your ICICI Bank Card XX4005 on 01-Dec-26 towards NETFLIX as per your e-mandate.',
+      x: { kind: 'reminder', rkind: 'upcoming_debit' } },
+    { a: 'AD-ICICIB', b: '123456 is the OTP for your txn of INR 1,299.00 at AMAZON on ICICI Bank Card XX4005. OTPs are SECRET. DO NOT share.',
+      x: { kind: 'ignore' } },
+    { a: 'AD-ICICIB', b: 'Cash withdrawal of Rs 10,000.00 from ICICI Bank ATM. Acct XX123 debited on 02-Nov-26. Avl Bal Rs 35,000.00.',
+      x: { kind: 'txn', dir: 'debit', amount: 10000, category: 'Cash withdrawal', mode: 'ATM' } },
+    { a: 'AD-ICICIB', b: 'Get a pre-approved Personal Loan up to Rs 5,00,000 from ICICI Bank. Apply now: icici.co/pl T&C',
+      x: { kind: 'ignore' } },
+    { a: 'AD-ICICIB', b: 'Transaction of INR 2,400.00 on ICICI Bank Card XX4005 at IRCTC has been declined due to incorrect PIN.',
+      x: { kind: 'reminder', rkind: 'failed' } },
+    { a: 'AD-ICICIB', b: 'ICICI Bank Acct XX123 debited for Rs 18,000.00 on 03-Nov-26; MOHAMMED IBRAHIM credited. UPI:431299991111. Call 18002662 for dispute.',
+      x: { kind: 'txn', dir: 'debit', amount: 18000, merchant: 'Mohammed Ibrahim', category: 'Uncategorised', needsReview: true } },
+    // ---- Axis ----
+    { a: 'AX-AXISBK-S', b: 'INR 500.00 debited\nA/c no. XX1234\n12-11-26, 14:05:33\nUPI/P2M/431234567890/SWIGGY\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank',
+      x: { kind: 'txn', dir: 'debit', amount: 500, acctType: 'savings', last4: '1234', bank: 'Axis', merchant: 'Swiggy', category: 'Food & Dining', mode: 'UPI' } },
+    { a: 'VM-AXISBK', b: 'INR 10000.00 credited\nA/c no. XX1234\n12-11-26, 10:00:00 IST\nUPI/P2A/431200001111/SALEEM A/ICICI Bank - Axis Bank',
+      x: { kind: 'txn', dir: 'credit', amount: 10000, bank: 'Axis', merchant: 'Saleem A', needsReview: true } },
+    { a: 'AX-AXISBK-S', b: 'Spent INR 1250\nAxis Bank Card no. XX5678\n12-11-26 13:20:11 IST\nBIG BAZAAR\nAvl Limit: INR 98750\nNot you? SMS BLOCK 5678 to 919951860002',
+      x: { kind: 'txn', dir: 'debit', amount: 1250, acctType: 'credit_card', last4: '5678', merchant: 'Big Bazaar', category: 'Groceries', mode: 'Card', balance: 98750 } },
+    { a: 'AX-AXISBK-S', b: 'Debit INR 2500.00\nAxis Bank A/c XX1234\n05-11-26 08:00:00\nACH-DR-LIC OF INDIA\nAvl Bal INR 40,210.55\nSMS BLOCKALL 1234 to 919951860002',
+      x: { kind: 'txn', dir: 'debit', amount: 2500, acctType: 'savings', merchant: 'Lic Of India', category: 'Insurance', auto: true } },
+    { a: 'AX-AXISBK-S', b: 'Payment of INR 12000 has been received towards your Axis Bank Credit Card XX5678 on 08-11-26. Thank you.',
+      x: { kind: 'txn', dir: 'credit', amount: 12000, acctType: 'credit_card', category: 'Card bill payment' } },
+    { a: 'AX-AXISBK-S', b: 'Your Axis Bank Credit Card XX5678 statement is generated. Total due INR 15,300.00, Min due INR 765.00. Due date 28-11-26.',
+      x: { kind: 'reminder', rkind: 'bill_due', amount: 15300, hasDue: true } },
+    { a: 'AX-AXISBK-S', b: 'INR 3200.00 debited\nA/c no. XX1234\n09-11-26, 19:44:02\nUPI/P2M/431255550000/INDIAN OIL CORP\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank',
+      x: { kind: 'txn', dir: 'debit', amount: 3200, merchant: 'Indian Oil Corp', category: 'Fuel' } },
+    { a: 'AX-AXISBK-S', b: 'Your Axis Bank A/c XX1234 balance is below the minimum balance of INR 10,000. Please maintain sufficient balance to avoid charges.',
+      x: { kind: 'reminder', rkind: 'low_balance' } },
+    { a: 'AX-AXISBK-S', b: 'Spent INR 899\nAxis Bank Card no. XX5678\n10-11-26 21:02:45 IST\nAPOLLO PHARMACY\nAvl Limit: INR 97851\nNot you? SMS BLOCK 5678 to 919951860002',
+      x: { kind: 'txn', dir: 'debit', amount: 899, category: 'Health', merchant: 'Apollo Pharmacy' } },
+    { a: 'AX-AXISBK-S', b: 'INR 450.00 debited\nA/c no. XX1234\n11-11-26, 08:15:10\nUPI/P2A/431277770000/KUMAR STORES\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank',
+      x: { kind: 'txn', dir: 'debit', amount: 450, category: 'Shopping' } },
+    { a: 'AX-AXISBK-S', b: 'Your EMI of INR 8,450.00 for Axis Bank Loan A/c XX9911 will be debited on 05-12-26. Please maintain sufficient balance.',
+      x: { kind: 'reminder', rkind: 'upcoming_debit', amount: 8450, hasDue: true } },
+    // ---- non-financial ----
+    { a: 'VK-SWIGGY', b: 'Your order is on the way! Get 50% off up to Rs 100 on your next order.', x: { kind: 'ignore' } },
+    { a: 'JM-JIOINF', b: 'Recharge of Rs 299 is due on 15-Nov-26 for Jio number 98XXXXXX01.', x: { kind: 'ignore' } }
+  ];
+  if (typeof module !== 'undefined' && module.exports) module.exports = S;
+  root.SAMPLE_SMS = S;
+})(typeof window !== 'undefined' ? window : globalThis);

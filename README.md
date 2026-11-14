@@ -1,0 +1,52 @@
+# Slate
+
+Know what's safe to spend today. Slate reads the transaction SMS your bank already sends, turns a monthly limit into one number for each day, and keeps everything on the phone.
+
+- **Safe to spend today**, updated after every spend, with EMIs and rent set aside first
+- **One-tap sorting** of unrecognised spends, straight from the notification
+- **Balances** for bank accounts, credit cards and cash, kept current from the moment you enter them
+- **Fixed payments** and **lent & borrowed** tracking that carry across months
+- **A clean slate every month**: the month is exported to Downloads as a spreadsheet file, then cleared, with a shareable month wrap
+- **Four looks**: Classic, Sway, Paper and Glow
+- **Private by design**: no account, no cloud, no internet permission
+
+Package `com.kaybuilds.slate` · minimum Android 10 (API 29) · targets Android 16 (API 36).
+
+## Layout
+
+| Path | What it is |
+| --- | --- |
+| `app/src/main/assets/` | The whole interface (`index.html`, `app.js`, `style.css`) and the SMS parser (`parser.js`) |
+| `app/src/main/java/com/kaybuilds/slate/` | Thin native shell: SMS reading, notifications, storage, export, system bars |
+| `app/src/main/res/` | Icon, notification icon, theme |
+| `tests/` | Parser tests: `node tests/parser.test.js` |
+| `docs/privacy.html` | Privacy policy page, ready for GitHub Pages or any web host |
+| `build-play.sh` | Builds the signed App Bundle for Google Play |
+| `build-local.sh` | Builds a sideload APK for testing on your own phone |
+
+## Building for Google Play
+
+Needs `aapt2` (a 2024 or newer build; older ones cannot read the API 36 platform), `dalvik-exchange`, a JDK, an API 36 `android.jar` and [bundletool](https://github.com/google/bundletool/releases).
+
+```sh
+AAPT2=/path/to/aapt2 AJ=/path/to/android-36/android.jar BUNDLETOOL=/path/to/bundletool-all.jar \
+KS=/path/to/slate-upload-key.jks KS_PASS='…' KS_ALIAS=upload \
+sh build-play.sh 10 1.0.0
+```
+
+This writes `slate-release.aab`, signed with the upload key. Raise the version code by one for every upload.
+
+**The upload key and its password are never committed.** Keep them in a password manager. Google Play re-signs the app with its own key (Play App Signing), so a lost upload key can be reset through Play Console support.
+
+## Testing a build on a phone
+
+```sh
+java -jar bundletool-all.jar build-apks --bundle=slate-release.aab --output=slate.apks --mode=universal \
+  --ks=/path/to/test-key.jks --ks-pass=pass:… --ks-key-alias=…
+```
+
+Unzip `slate.apks` and install `universal.apk`. Android blocks SMS access for sideloaded apps until you allow it: App info → ⋮ → Allow restricted settings, then Permissions → SMS → Allow.
+
+## Privacy
+
+Slate has no `INTERNET` permission. All parsing and storage happen in the app's private storage on the device. See [`docs/privacy.html`](docs/privacy.html).

@@ -49,4 +49,4 @@ Unzip `slate.apks` and install `universal.apk`. Android blocks SMS access for si
 
 ## Privacy
 
-Slate has no `INTERNET` permission. All parsing and storage happen in the app's private storage on the device. See [`docs/privacy.html`](docs/privacy.html).
+Slate has no `INTERNET` permission. All parsing and storage happen in the app's private storage on the device. Published at https://epostkashif-droid.github.io/knockit-legal/slate/privacy.html (source: [`docs/privacy.html`](docs/privacy.html)).

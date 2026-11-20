@@ -10,7 +10,7 @@ name: Build test APK
 on:
   push:
     branches: ['main']
-    paths-ignore: ['README.md', 'docs/**']
+    paths-ignore: ['README.md', 'docs/**', 'marketing/**']
   workflow_dispatch:
   schedule:
     - cron: '17 3 * * 1'      # weekly: touches the cached key so GitHub never expires it

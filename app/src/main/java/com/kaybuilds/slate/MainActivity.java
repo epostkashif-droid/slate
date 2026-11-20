@@ -42,6 +42,7 @@ import java.nio.charset.StandardCharsets;
 public class MainActivity extends Activity {
     private static final int REQ_SMS = 1;
     private static final int REQ_NOTIFY = 2;
+    private static final int REQ_RESTORE = 3;
     private static final String PERM_NOTIFY = "android.permission.POST_NOTIFICATIONS";
     private WebView web;
     private FrameLayout root;
@@ -155,6 +156,22 @@ public class MainActivity extends Activity {
         }
     }
 
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_RESTORE) return;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) { js("window.onNative('restore', null)"); return; }
+        try (java.io.InputStream in = getContentResolver().openInputStream(data.getData())) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[16384];
+            int n, total = 0;
+            while (in != null && (n = in.read(buf)) > 0) { out.write(buf, 0, n); total += n; if (total > 20 * 1024 * 1024) break; }
+            js("window.onNative('restore', " + JSONObject.quote(new String(out.toByteArray(), StandardCharsets.UTF_8)) + ")");
+        } catch (Exception e) {
+            js("window.onNative('restore', '')");
+        }
+    }
+
     private void js(final String code) {
         runOnUiThread(new Runnable() { @Override public void run() { if (pageReady) web.evaluateJavascript(code, null); } });
     }
@@ -167,6 +184,29 @@ public class MainActivity extends Activity {
         public void setChrome(final String hex, final boolean dark) {
             runOnUiThread(new Runnable() { @Override public void run() {
                 try { chrome(android.graphics.Color.parseColor(hex), dark); } catch (Exception ignored) { }
+            } });
+        }
+
+        /** A small physical tick: 0 = tap, 1 = success, 2 = warning. Uses the view's own haptics, so no extra permission. */
+        @JavascriptInterface
+        public void haptic(final int kind) {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                int c = kind == 1 ? (Build.VERSION.SDK_INT >= 30 ? android.view.HapticFeedbackConstants.CONFIRM : android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                        : kind == 2 ? (Build.VERSION.SDK_INT >= 30 ? android.view.HapticFeedbackConstants.REJECT : android.view.HapticFeedbackConstants.LONG_PRESS)
+                        : android.view.HapticFeedbackConstants.CLOCK_TICK;
+                web.performHapticFeedback(c);
+            } });
+        }
+
+        /** Lets the person pick a Slate backup file; the contents come back through onNative('restore', text). */
+        @JavascriptInterface
+        public void pickBackup() {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("*/*");
+                i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/json", "text/plain", "application/octet-stream"});
+                try { startActivityForResult(i, REQ_RESTORE); } catch (Exception e) { js("window.onNative('restore', '')"); }
             } });
         }
 

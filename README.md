@@ -6,8 +6,11 @@ Know what's safe to spend today. Slate reads the transaction SMS your bank alrea
 - **One-tap sorting** of unrecognised spends, straight from the notification
 - **Balances** for bank accounts, credit cards and cash, kept current from the moment you enter them
 - **Fixed payments** and **lent & borrowed** tracking that carry across months
-- **A clean slate every month**: the month is exported to Downloads as a spreadsheet file, then cleared, with a shareable month wrap
-- **Four looks**: Classic, Sway, Paper and Glow
+- **A clean slate every month, nothing lost**: on the 1st the month moves to an in-app **Archive** (wrap, donut, calendar and every spend, read-only, exportable), with an optional spreadsheet copy in Downloads and a shareable month wrap
+- **Your own categories**: 19 starters plus any you add, with emoji, colour, an optional monthly cap, reordering and hiding; create one straight from the picker
+- **Live visuals**: a liquid "tank" of what is left, pace vs. the month, a donut, "every ₹100", a spending calendar, month-by-month bars, a wallet pocket for balances and a "truly free to use" waterfall
+- **Backup and restore**: one file with every month and setting, restorable on a new phone
+- **Four looks × eight colours**: Classic, Sway, Paper and Glow; Emerald, Ocean, Grape, Teal, Sunset, Rose, Graphite and an animated Aurora; Auto/Light/Dark; Lively or Calm motion (confetti, ripples, haptics)
 - **Private by design**: no account, no cloud, no internet permission
 
 Package `com.kaybuilds.slate` · minimum Android 10 (API 29) · targets Android 16 (API 36).

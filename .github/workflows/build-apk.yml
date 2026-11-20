@@ -9,7 +9,7 @@ name: Build test APK
 # The key is never committed. An encrypted copy is published to the builds branch so it can be handed to you.
 on:
   push:
-    branches: ['main', 'slate-v2-visuals-archive']
+    branches: ['main']
     paths-ignore: ['README.md', 'docs/**']
   workflow_dispatch:
   schedule:

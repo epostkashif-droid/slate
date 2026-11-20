@@ -54,6 +54,10 @@ public class SmsReceiver extends BroadcastReceiver {
             for (SmsMessage m : parts) { if (m != null && m.getDisplayMessageBody() != null) sb.append(m.getDisplayMessageBody()); }
             double amt = spendAmount(parts[0].getDisplayOriginatingAddress(), sb.toString());
             if (amt <= 0) return;
+            // Accounts the person removed as "not mine": no prompt for their messages.
+            for (String d : p.getString("mute", "").split("\n")) {
+                if (d.length() >= 3 && Pattern.compile("(?:[xX*]|\\.\\.|\\s)" + Pattern.quote(d) + "\\b").matcher(sb).find()) return;
+            }
 
             Calendar c = Calendar.getInstance();
             String month = String.format(Locale.ROOT, "%04d-%02d", c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1);

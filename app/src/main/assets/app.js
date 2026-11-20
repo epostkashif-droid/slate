@@ -41,7 +41,7 @@
 
   var state = { v: 1, month: '', txns: [], rules: {}, deleted: {}, budget: 0, notify: false, lastScan: 0, wrap: null, onboarded: false, fixed: [], iou: [], accts: {},
     cats: null, catsV: 0, archive: [], keepMonths: 24, autoCsv: true, theme: 'emerald', mode: 'system', motion: 'lively' };
-  var ui = { tab: 'today', perm: true, denied: false, q: '', fb: '', selBar: -1, layer: null, sheet: null, anim: true, viz: 'donut', fresh: {}, aq: '' };
+  var ui = { tab: 'today', perm: true, denied: false, q: '', fb: '', selBar: -1, layer: null, sheet: null, anim: true, viz: 'donut', fresh: {} };
 
   // ---------- helpers ----------
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -93,8 +93,10 @@
   function alias(n) { return (state.alias && state.alias[n]) || n; }
   function ensureAccts() {
     if (!state.accts.Cash) state.accts.Cash = { type: 'cash', base: null };
-    state.txns.forEach(function (t) { if (t.acct && !state.accts[t.acct]) state.accts[t.acct] = { type: / Card( |$)/.test(t.acct) ? 'card' : 'bank', base: null }; });
+    if (!state.acctOff) state.acctOff = {};
+    state.txns.forEach(function (t) { if (t.acct && !state.accts[t.acct] && !state.acctOff[t.acct]) state.accts[t.acct] = { type: / Card( |$)/.test(t.acct) ? 'card' : 'bank', base: null }; });
   }
+  function mutedDigits() { return Object.keys(state.acctOff || {}).filter(function (k) { return state.acctOff[k].mode === 'gone'; }).map(function (k) { var m = /(\d{3,6})$/.exec(k); return m ? m[1] : ''; }).filter(Boolean); }
   function balOf(name) {
     var a = state.accts[name]; if (!a || !a.base) return null;
     var v = a.base.v, n = 0, card = a.type === 'card';
@@ -152,7 +154,7 @@
     var c = calc(), n = new Date(), known = P.KNOWN_WORDS.concat(Object.keys(state.rules)).filter(function (w) { return w.length >= 4; });
     var fixed = state.fixed.filter(function (f) { return !fxPaid(f) && f.keys && f.keys.length; }).map(function (f) { return f.keys[0] + '\t' + f.name.replace(/[\t\n]/g, ' ') + '\t' + f.amt; });
     try { A.setLive(JSON.stringify({ notify: !!state.notify, budget: state.budget || 0, month: state.month, day: n.getFullYear() * 10000 + (n.getMonth() + 1) * 100 + n.getDate(), spentMonth: c.spentMonth, spentToday: c.spentToday,
-      reserve: c.reserve || 0, known: known.join('\n'), fixed: fixed.join('\n'), top: topBuckets().map(function (k) { return k + '\t' + bk(k)[0] + ' ' + bk(k)[1]; }).join('\n') })); } catch (e) { }
+      reserve: c.reserve || 0, mute: mutedDigits().join('\n'), known: known.join('\n'), fixed: fixed.join('\n'), top: topBuckets().map(function (k) { return k + '\t' + bk(k)[0] + ' ' + bk(k)[1]; }).join('\n') })); } catch (e) { }
   }
   function save() { clearTimeout(saveT); saveT = setTimeout(function () { try { A.saveData(JSON.stringify(state)); } catch (e) { toast('Could not save'); } pushLive(); }, 120); }
 
@@ -191,6 +193,8 @@
       var r = P.parseSms(m, {});
       if (r.kind !== 'txn') { if (have[id] && full) { state.txns.splice(state.txns.indexOf(have[id]), 1); } return; }
       var x = r.txn, t = { id: id, ts: x.ts, amt: x.amount, dir: x.dir === 'debit' ? 'out' : 'in', who: x.merchant, acct: alias(acctName(x)), raw: x.raw, edited: false, note: '' };
+      var off = state.acctOff && state.acctOff[t.acct];
+      if (off && off.mode === 'gone') { state.deleted[id] = 1; (off.ids = off.ids || []).push(id); if (have[id]) state.txns.splice(state.txns.indexOf(have[id]), 1); return; }
       if (x.balance != null && x.acctType !== 'credit_card') t.bal = x.balance;
       t.b = bucketFor(x);
       if (t.dir === 'in' && t.b === '?') t.b = 'other';                // money in never needs sorting
@@ -368,11 +372,6 @@
         var cc = catOf(k[0]), cap = cc && cc.cap > 0 ? cc.cap : 0, ref = cap ? Math.max(cap, k[1]) : s.cats[0][1];
         return '<div class="cat' + (ui.fb === k[0] ? ' on' : '') + '" data-act="fb" data-v="' + esc(k[0]) + '"><div class="l"><span>' + bk(k[0])[0] + ' ' + esc(bk(k[0])[1]) + '</span><span class="num"><b>' + inr(k[1]) + '</b> <span class="mute">' + (cap ? 'of ' + kfmt(cap) : Math.round(k[1] / s.spent * 100) + '%') + '</span></span></div><div class="trk"><i style="width:' + (k[1] / ref * 100).toFixed(1) + '%;background:' + (cap && k[1] > cap ? 'var(--red)' : catColor(k[0])) + '"></i>' + (cap ? '<u style="left:' + (cap / ref * 100).toFixed(1) + '%"></u>' : '') + '</div></div>';
       }).join('') + '</div>';
-      var max = 0; for (i = 1; i <= c.dim; i++) if ((c.per[i] || 0) > max) max = c.per[i];
-      var tip = ui.selBar > 0 ? '<b>' + inr(c.per[ui.selBar] || 0) + '</b> on the ' + ui.selBar + nth(ui.selBar) : 'Tap a bar to see that day';
-      h += '<div class="card"><h2>Day by day</h2><div class="tip">' + tip + '</div><div class="bars">';
-      for (i = 1; i <= c.dim; i++) { var v = c.per[i] || 0; h += '<div class="b' + (v ? '' : ' zero') + (i === c.day ? ' today' : '') + (i === ui.selBar ? ' sel' : '') + '" data-act="bar" data-v="' + i + '"><i style="height:' + (max ? Math.max(v / max * 100, v ? 3 : 0) : 0).toFixed(1) + '%;--i:' + i + '"></i></div>'; }
-      h += '</div><div class="xl">'; for (i = 1; i <= c.dim; i++) h += '<span>' + (i === 1 || i % 5 === 0 ? i : '') + '</span>'; h += '</div></div>';
     }
     h += '<div class="row" style="margin-bottom:8px"><button class="btn dark" style="margin:0" data-act="wrap">' + mname(state.month) + ' so far ✨</button><button class="btn" style="margin:0" data-act="export">Export</button></div>';
     h += '<button class="btn" style="margin-bottom:12px" data-act="goArch">🗂️ Archive' + (state.archive.length ? ' · ' + state.archive.length + ' past month' + (state.archive.length === 1 ? '' : 's') : '') + '</button>';
@@ -608,14 +607,7 @@
     if (io.owed) h += '<p class="vnote">Plus <b class="num">' + inr(io.owed) + '</b> people owe you, not counted until it comes back.</p>';
     return h + '</div>';
   }
-  function acctShare() {
-    var parts = []; Object.keys(state.accts).forEach(function (k) { var a = state.accts[k], b = balOf(k); if (b && a.type !== 'card' && b.v > 0) parts.push([k, b.v]); });
-    if (parts.length < 2) return '';
-    var tot = 0; parts.forEach(function (p) { tot += p[1]; }); parts.sort(function (a, b) { return b[1] - a[1]; });
-    var cols = ['var(--accent)', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#94a3b8'];
-    return '<div class="card"><h2>Where your money sits</h2><div class="share">' + parts.map(function (p, i) { return '<i style="width:' + (p[1] / tot * 100).toFixed(2) + '%;background:' + cols[i % cols.length] + ';--i:' + i + '"></i>'; }).join('') + '</div><div class="dl" style="margin-top:10px">' +
-      parts.map(function (p, i) { return '<button><i style="background:' + cols[i % cols.length] + '"></i>' + esc(p[0]) + ' <b class="num">' + Math.round(p[1] / tot * 100) + '%</b></button>'; }).join('') + '</div></div>';
-  }
+
 
   // ---------- the archive: every month that clears is kept here ----------
   function dimOf(mk) { var a = mk.split('-'); return new Date(+a[0], +a[1], 0).getDate(); }
@@ -669,7 +661,7 @@
   }
   function archMonth(mk) {
     var e = archEntry(mk); if (!e) return;
-    ui.catSnap = e.cats || {}; ui.arch = e; ui.aq = ''; ui.fb = '';
+    ui.catSnap = e.cats || {}; ui.arch = e; ui.fb = '';
     var h = '<div class="row"><button class="x" data-act="archBack" aria-label="Back">‹</button><b class="grow" style="font-size:18px">' + mlong(mk) + '</b><button class="x" data-act="closeFull">✕</button></div>' + wrapHtml(e.w, false);
     h += '<div class="card"><h2>Where it went</h2>' + donutSvg(e.w.cats, e.w.spent, '') + '</div><div class="card"><h2>The month as a calendar</h2>' + heatmap(e.w.per || {}, mk, e.days, e.budget, '') + '</div>';
     h += '<div class="row" style="margin-bottom:12px"><button class="btn pri" style="margin:0" data-act="archCsv">Export spreadsheet</button><button class="btn" style="margin:0" data-act="archImg">Share picture</button></div>';
@@ -680,11 +672,12 @@
 
   // ---------- wallet pocket, date strip, floating dock (inspired by the reference screens) ----------
   function walletHero() {
-    var bt = balTotals(), ks = Object.keys(state.accts).filter(function (k) { return k !== 'Cash'; }).sort(function (a, b) { return (balOf(b) ? 1 : 0) - (balOf(a) ? 1 : 0); }).slice(0, 3);
-    if (!ks.length) ks = ['Cash'];
-    return '<div class="wallet' + (ui.fan ? ' fan' : '') + '" data-act="fan">' + ks.map(function (k, i) {
-      var b = balOf(k), a = state.accts[k]; return '<div class="wc" style="--i:' + i + '"><span class="ell">' + esc(k) + '</span><em>' + (a.type === 'card' ? 'CREDIT' : a.type === 'cash' ? 'CASH' : 'BANK') + '</em><b class="num">' + (b ? (a.type === 'card' ? 'Owe ' : '') + inr(b.v) : 'Tap below to set') + '</b></div>';
-    }).join('') + '<div class="pocket"><span class="pl">Total in hand</span><b class="num"' + (bt.set ? ' data-count="' + Math.max(bt.have, 0) + '"' : '') + '>' + (bt.set ? inr(bt.have) : '—') + '</b><span class="pr">' + (bt.owe ? '<span>💳 ' + inr(bt.owe) + ' on cards</span>' : '') + '<span class="fanb">' + (ui.fan ? 'Tuck in' : 'Peek') + '</span></span></div></div>';
+    var bt = balTotals(), order = { bank: 0, card: 1, cash: 2 };
+    var ks = Object.keys(state.accts).sort(function (a, b) { return order[state.accts[a].type] - order[state.accts[b].type]; }), n = ks.length, open = !!ui.fan;
+    return '<div class="wallet' + (open ? ' fan' : '') + '" style="--n:' + n + '">' + ks.map(function (k, i) {
+      var b = balOf(k), a = state.accts[k];
+      return '<button class="wc ' + a.type + '" style="--i:' + i + ';--j:' + Math.max(i - (n - 3), 0) + (i < n - 3 ? ';--o:0' : '') + '" data-act="' + (open ? 'balOpen' : 'fan') + '" data-v="' + esc(k) + '"><span class="ell">' + esc(k) + '</span><em>' + (a.type === 'card' ? 'CREDIT' : a.type === 'cash' ? 'CASH' : 'BANK') + '</em><b class="num">' + (b ? (a.type === 'card' ? 'Owe ' : '') + inr(b.v) : 'Tap to set') + '</b></button>';
+    }).join('') + '<button class="pocket" data-act="fan"><span class="pl">Total in hand</span><b class="num"' + (bt.set ? ' data-count="' + Math.max(bt.have, 0) + '"' : '') + '>' + (bt.set ? inr(bt.have) : '—') + '</b><span class="pr">' + (bt.owe ? '<span>💳 ' + inr(bt.owe) + ' on cards</span>' : '<span></span>') + '<span class="fanb">' + (open ? 'Tuck in' : 'See all ' + n) + '</span></span></button></div>';
   }
   function dayStrip(c) {
     var sel = ui.selBar > 0 ? ui.selBar : c.day, a = state.month.split('-'), h = '<div class="dstrip"><div class="dsh"><b>' + mname(state.month) + '</b><span>' + (sel === c.day ? 'Today' : DOW[new Date(+a[0], +a[1] - 1, sel).getDay()] + ' ' + sel) + ' · ' + inr(c.per[sel] || 0) + '</span></div><div class="dsr" id="dsr">';
@@ -1031,7 +1024,7 @@
   function viewBals() {
     ensureAccts();
     var bt = balTotals(), keys = Object.keys(state.accts), h = head('Kept up to date with every spend and credit', 'Balances', '');
-    h += walletHero() + moneyFlow() + acctShare();
+    h += walletHero() + moneyFlow();
     function group(title, type, icon) {
       var ks = keys.filter(function (k) { return state.accts[k].type === type; }); if (!ks.length) return '';
       return '<h2 style="margin-top:6px">' + title + '</h2><div class="card" style="padding:4px 16px">' + ks.map(function (k) {
@@ -1042,6 +1035,8 @@
     }
     h += group('Bank accounts', 'bank', '🏦') + group('Credit cards · what you owe', 'card', '💳') + group('Cash', 'cash', '💵');
     h += '<button class="btn" data-act="acctAdd">Add another account or card</button>';
+    var off = Object.keys(state.acctOff || {});
+    if (off.length) h += '<h2 style="margin-top:16px">Removed</h2><div class="card" style="padding:4px 16px">' + off.map(function (k) { var o = state.acctOff[k]; return '<div class="kv"><span><b>' + esc(k) + '</b><br><span class="mute small">' + (o.mode === 'gone' ? 'Not yours · its messages are ignored' : 'Hidden from Balances · spends kept') + '</span></span><button class="lnk" data-act="acctBack" data-v="' + esc(k) + '">Bring back</button></div>'; }).join('') + '</div>';
     h += '<p class="mute small" style="margin:12px 4px 0">Type each balance once. From that moment Slate adds every credit and subtracts every spend it sees. Cash you withdraw from a bank is added to Cash. If a figure ever looks off, tap it and type the right one.</p>';
     return h;
   }
@@ -1052,7 +1047,7 @@
       '<input class="amtin num" type="number" id="balVal" inputmode="decimal" placeholder="₹" value="' + (b ? Math.round(b.v) : '') + '">';
     if (hint) { var d = new Date(hint.ts); h += '<div class="quick"><button data-act="balHint" data-v="' + hint.bal + '">Bank SMS on ' + d.getDate() + ' ' + MON[d.getMonth()].slice(0, 3) + ' said ' + inr(hint.bal) + ' · use it</button></div>'; }
     h += '<p class="mute small" style="margin:12px 2px 0">' + (b ? 'Saving replaces the current figure. Slate counts from this moment again.' : 'Slate counts from this moment on.') + '</p>' +
-      '<div style="margin-top:14px"><button class="btn pri" data-act="balSave">Save</button>' + (b ? '<button class="btn" data-act="balStop">Stop tracking this one</button>' : '') + (a.type !== 'cash' && Object.keys(state.accts).filter(function (k) { return k !== name && state.accts[k].type === a.type; }).length ? '<button class="btn" data-act="mergeAsk">This is the same as another ' + (card ? 'card' : 'account') + '…</button>' : '') + '</div>';
+      '<div style="margin-top:14px"><button class="btn pri" data-act="balSave">Save</button>' + (b ? '<button class="btn" data-act="balStop">Stop tracking this one</button>' : '') + (a.type !== 'cash' && Object.keys(state.accts).filter(function (k) { return k !== name && state.accts[k].type === a.type; }).length ? '<button class="btn" data-act="mergeAsk">This is the same as another ' + (card ? 'card' : 'account') + '…</button>' : '') + (a.type !== 'cash' ? '<button class="btn danger" data-act="acctRemoveAsk">Remove this ' + (card ? 'card' : 'account') + '</button>' : '') + '</div>';
     sheet(h, 'bal');
     setTimeout(function () { var e = document.getElementById('balVal'); if (e && !b) e.focus(); }, 250);
   }
@@ -1190,7 +1185,12 @@
     stash: function (v) { var a = v.split('|'), g = goals().filter(function (x) { return x.id === a[0]; })[0]; if (!g) return; state.stashDay = iso(Date.now()); goalSheet(g); setTimeout(function () { goalDeposit(g, +a[1], 'stash'); setTimeout(renderA, 1300); }, 350); },
     stashNo: function () { state.stashDay = iso(Date.now()); save(); renderA(); }, goArch: function () { closeSheet(); archiveLayer(); },
     viz: function (k) { if (ui.tab !== 'month') { ui.viz = k; ACT.tab('month'); return; } ui.viz = k; hap(0); keep(); var vb = document.querySelector('.vbody'); if (vb) animIn(vb); },
-    fan: function () { ui.fan = !ui.fan; hap(0); var w = document.querySelector('.wallet'); if (w) { w.classList.toggle('fan', ui.fan); var fb = w.querySelector('.fanb'); if (fb) fb.textContent = ui.fan ? 'Tuck in' : 'Peek'; } },
+    fan: function () {
+      ui.fan = !ui.fan; hap(0); var w = document.querySelector('.wallet'); if (!w) return;
+      w.classList.toggle('fan', ui.fan); var cs = w.querySelectorAll('.wc'), i;
+      for (i = 0; i < cs.length; i++) cs[i].setAttribute('data-act', ui.fan ? 'balOpen' : 'fan');
+      w.querySelector('.fanb').textContent = ui.fan ? 'Tuck in' : 'See all ' + cs.length;
+    },
     autoCsv: function () { state.autoCsv = state.autoCsv === false; save(); settingsSheet(); },
     catOpen: function (k) { var c = catOf(k); if (c) { ui.catRet = 'cats'; catSheet(c, false); } },
     catNew: function () { ui.catRet = 'cats'; catSheet({ k: '', e: '🏷️', n: '', c: SW[(state.cats.length * 5) % SW.length], custom: true }, true); },
@@ -1238,7 +1238,6 @@
     keepAsk: function () { sheet('<div class="hd"><b>Keep months for</b><button class="x" data-act="close">✕</button></div><div class="card" style="padding:4px 16px">' + [[6, '6 months'], [12, '1 year'], [24, '2 years'], [0, 'Forever']].map(function (o) { return '<div class="kv" data-act="keepSet" data-v="' + o[0] + '"><b>' + o[1] + '</b><span>' + ((state.keepMonths || 0) === o[0] ? '✓' : '') + '</span></div>'; }).join('') + '</div><p class="mute small" style="margin:4px">Each month takes very little space. Older months beyond this are removed when a new month is archived.</p>', 'keep'); },
     keepSet: function (v) { state.keepMonths = +v; save(); closeSheet(); archiveLayer(); },
     backup: function () { var ok = false; try { ok = A.saveToDownloads('Slate-backup-' + iso(Date.now()) + '.json', 'application/json', JSON.stringify({ app: 'slate', kind: 'backup', at: Date.now(), state: state })); } catch (x) { } toast(ok ? 'Backup saved to Downloads' : 'Could not save the backup'); if (ok) hap(1); },
-    restore: function () { try { A.pickBackup(); } catch (x) { toast('Restoring needs the latest Slate'); } },
     importGo: function () {
       var list = ui.importList; if (!list) return; ui.importList = null;
       if (state.onboarded && A.hasSmsPermission()) scan(false);       // read the latest SMS first so more entries match
@@ -1254,7 +1253,7 @@
     go: function (v) { closeSheet(); ACT.tab(v); },
     goSort: function () { closeSheet(); ACT.sort(); }, goFixed: function () { closeSheet(); fixedLayer(); }, goIou: function () { closeSheet(); iouLayer(); }, goSettings: function () { settingsSheet(); },
     sortOne: function () { ACT.sort(); },
-    railDay: function (v) { if (+v > new Date().getDate()) return; ui.selBar = +v; ui.tab = 'month'; renderA(); var b = document.querySelector('.bars'); if (b) b.scrollIntoView({ block: 'center' }); },
+    railDay: function (v) { if (+v > new Date().getDate()) return; ui.selBar = +v; ui.tab = 'month'; renderA(); var b = document.querySelector('.dcard'); if (b) b.scrollIntoView({ block: 'center' }); },
     fixed: fixedLayer, iou: iouLayer, bals: balsLayer,
     balOpen: balSheet,
     balHint: function (v) { var e = document.getElementById('balVal'); e.value = Math.round(+v); e.setAttribute('data-exact', v); },
@@ -1270,6 +1269,25 @@
       state.alias[from] = to; Object.keys(state.alias).forEach(function (k) { if (state.alias[k] === from) state.alias[k] = to; });
       state.txns.forEach(function (t) { if (t.acct === from) t.acct = to; });
       delete state.accts[from]; save(); closeSheet(); balsLayer(); toast('Merged into ' + to);
+    },
+    acctRemoveAsk: function () {
+      var k = ui.bal, n = state.txns.filter(function (t) { return t.acct === k; }).length;
+      sheet('<div class="hd"><b>Remove ' + esc(k) + '</b><button class="x" data-act="close">✕</button></div>' +
+        '<div class="card" style="padding:4px 16px"><div class="kv" data-act="acctRemove" data-v="gone"><span><b>It is not mine</b><br><span class="mute small">Removes it' + (n ? ' and its ' + n + ' transaction' + (n === 1 ? '' : 's') : '') + '. Future messages about it are ignored, with no notifications.</span></span><span class="mute">›</span></div>' +
+        '<div class="kv" data-act="acctRemove" data-v="hide"><span><b>It is mine, just hide it</b><br><span class="mute small">Off the Balances screen. Its spends still count.</span></span><span class="mute">›</span></div></div>' +
+        '<p class="mute small" style="margin:4px 4px 0">You can bring it back from the bottom of Balances.</p>', 'acctRm');
+    },
+    acctRemove: function (mode) {
+      var k = ui.bal; if (!state.accts[k]) return;
+      var o = state.acctOff[k] = { mode: mode, type: state.accts[k].type, base: state.accts[k].base, ids: [] };
+      if (mode === 'gone') state.txns = state.txns.filter(function (t) { if (t.acct !== k) return true; if (/^s/.test(t.id)) { state.deleted[t.id] = 1; o.ids.push(t.id); } return false; });
+      delete state.accts[k]; save(); closeSheet(); hap(2); balsLayer(); toast(mode === 'gone' ? 'Removed. Its messages will be ignored' : 'Hidden from Balances');
+    },
+    acctBack: function (k) {
+      var o = state.acctOff[k]; if (!o) return; delete state.acctOff[k];
+      state.accts[k] = { type: o.type || 'bank', base: o.base || null };
+      if (o.mode === 'gone') { (o.ids || []).forEach(function (id) { delete state.deleted[id]; }); scan(true); }     // only the messages this removal hid are read again
+      save(); balsLayer(); toast(k + ' is back');
     },
     balStop: function () { state.accts[ui.bal].base = null; save(); closeSheet(); balsLayer(); },
     acctAdd: function () {

@@ -258,6 +258,7 @@ public class MainActivity extends Activity {
                 e.putString("known", o.optString("known", ""));
                 e.putString("fixed", o.optString("fixed", ""));
                 e.putString("top", o.optString("top", ""));
+                e.putString("mute", o.optString("mute", ""));
                 e.apply();
             } catch (Exception ignored) { }
         }

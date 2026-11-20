@@ -193,6 +193,11 @@
       if (x.balance != null && x.acctType !== 'credit_card') t.bal = x.balance;
       t.b = bucketFor(x);
       if (t.dir === 'in' && t.b === '?') t.b = 'other';                // money in never needs sorting
+      if (!have[id]) {               // the same spend may already be here from an imported spreadsheet: adopt it instead of doubling up
+        var mk2 = minuteKey(t.ts, t.amt, t.dir), imp = null;
+        for (var q = 0; q < state.txns.length; q++) { var y = state.txns[q]; if (/^i/.test(y.id) && minuteKey(y.ts, y.amt, y.dir) === mk2) { imp = y; break; } }
+        if (imp) { t.b = imp.b; t.note = imp.note; t.edited = true; state.txns[state.txns.indexOf(imp)] = t; have[id] = t; return; }
+      }
       if (have[id]) state.txns[state.txns.indexOf(have[id])] = t; else { state.txns.push(t); n++; if (state.lastScan) ui.fresh[id] = 1; }
     });
     state.lastScan = Math.max(max, state.lastScan);
@@ -395,7 +400,7 @@
   function viewWelcome() {
     return '<div class="ob"><div class="logo"></div><h1>Know what you can spend today.</h1><p>One number, updated every time your bank texts you.</p>' +
       '<ul><li><b>Zero typing.</b> Slate reads your bank SMS on this phone.</li><li><b>A clean slate every month.</b> On the 1st your screen starts fresh. Last month moves to the Archive, ready to view or export.</li><li><b>Private by design.</b> No account, no cloud, no internet permission.</li></ul>' +
-      '<button class="btn pri" data-act="start">Get started</button></div>';
+      '<button class="btn pri" data-act="start">Get started</button><button class="btn" style="margin-top:8px" data-act="importStart">I have a Slate export or backup</button></div>';
   }
   function render() {
     nav();
@@ -658,7 +663,7 @@
     }
     h += '<div class="card" style="padding:4px 16px"><div class="kv" data-act="keepAsk"><span><b>Keep months for</b><br><span class="mute small">' + (state.keepMonths > 0 ? state.keepMonths + ' months, then the oldest go' : 'Forever') + '</span></span><span class="mute">›</span></div>' +
       '<div class="kv" data-act="backup"><span><b>Back up everything</b><br><span class="mute small">One file in Downloads with every month, category and setting</span></span><span class="mute">›</span></div>' +
-      '<div class="kv" data-act="restore"><span><b>Restore from a backup</b><br><span class="mute small">Moving to a new phone? Pick your Slate backup file</span></span><span class="mute">›</span></div></div>';
+      '<div class="kv" data-act="importStart"><span><b>Import an export or backup</b><br><span class="mute small">A Slate spreadsheet from any month, or a full backup from another phone</span></span><span class="mute">›</span></div></div>';
     full(h, 'archive');
   }
   function archMonth(mk) {
@@ -729,7 +734,7 @@
     sheet(h, 'cat');
   }
   function val(id) { var e = document.getElementById(id); return e ? e.value : ''; }
-  function clean(s) { return String(s || '').replace(/[<>"&\\]/g, '').trim(); }
+  function clean(s) { return String(s || '').replace(/[<>"\\]/g, '').trim(); }
   function animIn(root) {
     if (!root) return;
     var els = root.querySelectorAll('[data-count]'), i;
@@ -739,6 +744,85 @@
       var f = root.querySelector('.ring .f, .ringhero .f'); if (f) f.setAttribute('stroke-dashoffset', f.getAttribute('data-to'));
       var b = root.querySelector('.hero .bar i'); if (b) b.style.width = b.getAttribute('data-w') + '%';
     }, 60);
+  }
+
+  // ---------- import: a spreadsheet exported from any Slate version, or a full backup ----------
+  function parseCsv(text) {
+    var rows = [], row = [], f = '', q = false, i, ch;
+    text = String(text || '').replace(/^﻿/, '');
+    for (i = 0; i < text.length; i++) {
+      ch = text[i];
+      if (q) { if (ch === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === ',') { row.push(f); f = ''; }
+      else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(f); f = ''; if (row.length > 1 || row[0]) rows.push(row); row = []; }
+      else f += ch;
+    }
+    if (f || row.length) { row.push(f); rows.push(row); }
+    return rows;
+  }
+  function unguard(s) { s = String(s == null ? '' : s).trim(); return /^'[=+\-@]/.test(s) ? s.slice(1) : s; }
+  function minuteKey(ts, amt, dir) { return Math.floor(ts / 60000) + '|' + Math.round(amt * 100) + '|' + dir; }
+  var CAT_ALIAS = { 'people': 'people', 'bills & home': 'bills', 'not a spend': 'moved', 'unsorted': '?', 'family & friends': 'people' };
+  function csvRows(text) {      // -> [{ts, amt, dir, who, cat, acct, note}] or null if this is not a Slate export
+    var rows = parseCsv(text); if (!rows.length) return null;
+    var h = rows[0].map(function (x) { return x.trim().toLowerCase(); }), ix = function (n) { return h.indexOf(n); };
+    if (ix('date') < 0 || ix('amount') < 0) return null;
+    var out = [];
+    rows.slice(1).forEach(function (r) {
+      var d = /^(\d{4})-(\d{2})-(\d{2})/.exec(r[ix('date')] || ''), amt = parseFloat(String(r[ix('amount')] || '').replace(/[^\d.]/g, ''));
+      if (!d || !(amt > 0)) return;
+      var tm = /(\d{1,2}):(\d{2})\s*(am|pm)?/i.exec(r[ix('time')] || ''), hh = 12, mm = 0;
+      if (tm) { hh = +tm[1] % 12; mm = +tm[2]; if (/pm/i.test(tm[3] || '')) hh += 12; if (!tm[3]) hh = +tm[1]; }
+      var ty = String(r[ix('type')] || '').toLowerCase();
+      out.push({ ts: new Date(+d[1], +d[2] - 1, +d[3], hh, mm).getTime(), amt: amt, dir: /receiv|credit|in/.test(ty) ? 'in' : 'out',
+        who: unguard(r[ix('paid to / from')]), cat: unguard(r[ix('category')]), acct: unguard(r[ix('account')]), note: unguard(r[ix('note')]) });
+    });
+    return out;
+  }
+  function catForName(name, made) {
+    var n = String(name || '').trim(), l = n.toLowerCase(); if (!n) return '?';
+    if (CAT_ALIAS[l]) return CAT_ALIAS[l];
+    var cl = clean(n).toLowerCase();
+    for (var i = 0; i < state.cats.length; i++) { var cn = state.cats[i].n.toLowerCase(); if (cn === l || cn === cl) return state.cats[i].k; }
+    var c = { k: 'u' + Date.now().toString(36) + state.cats.length, e: '🏷️', n: clean(n).slice(0, 24) || 'Imported', c: SW[(state.cats.length * 5) % SW.length], custom: true };
+    state.cats.push(c); buildCats(); made.push(c.n); return c.k;
+  }
+  function importRows(list) {
+    var made = [], res = { matched: 0, added: 0, past: 0, months: {}, cats: made }, idx = {}, used = {};
+    state.txns.forEach(function (t) { var k = minuteKey(t.ts, t.amt, t.dir); (idx[k] = idx[k] || []).push(t); });
+    list.forEach(function (r) {
+      var b = catForName(r.cat, made), mk = mkey(new Date(r.ts));
+      if (mk > state.month) return;
+      var key = minuteKey(r.ts, r.amt, r.dir);
+      if (mk === state.month) {
+        var hit = (idx[key] || []).filter(function (t) { return !used[t.id]; })[0];
+        if (hit) { used[hit.id] = 1; if (b !== '?') hit.b = b; if (r.note) hit.note = r.note; hit.edited = true; if (b !== '?') learn(hit); res.matched++; }
+        else { var t = { id: 'i' + r.ts.toString(36) + Math.round(r.amt * 100).toString(36), ts: r.ts, amt: r.amt, dir: r.dir, who: r.who, b: b, acct: r.acct || '', note: r.note || '', edited: true };
+          if (!find(t.id)) { state.txns.push(t); used[t.id] = 1; (idx[key] = idx[key] || []).push(t); if (b !== '?') learn(t); res.added++; } }
+      } else {                  // an earlier month goes straight into the Archive
+        var e = archEntry(mk); if (!e) { e = { month: mk, txns: [], budget: state.budget, days: dimOf(mk) }; state.archive.push(e); }
+        var dup = e.txns.some(function (x) { return minuteKey(x.ts, x.amt, x.dir) === key; });
+        if (!dup) { e.txns.push({ id: 'i' + r.ts.toString(36) + Math.round(r.amt * 100).toString(36), ts: r.ts, amt: r.amt, dir: r.dir, who: r.who, b: b, acct: r.acct || '', note: r.note || '' }); res.past++; res.months[mk] = 1; }
+        var k2 = P.merchantKey(r.who); if (k2 && b !== '?' && b !== 'moved' && !state.rules[k2]) state.rules[k2] = b;
+      }
+    });
+    Object.keys(res.months).forEach(function (mk) { var e = archEntry(mk), snap = {}; e.txns.sort(function (a, b) { return b.ts - a.ts; }); e.txns.forEach(function (t) { snap[t.b] = bk(t.b); }); e.cats = snap; e.w = wrapOf(e.txns, mk, e.budget, e.days); });
+    state.archive.sort(function (a, b) { return a.month < b.month ? 1 : -1; });
+    state.txns.sort(function (a, b) { return b.ts - a.ts; });
+    return res;
+  }
+  function importFile(text) {
+    var s = String(text || '').trim();
+    if (s.charAt(0) === '{') return window.onNative('backupFile', s);
+    var list = csvRows(s);
+    if (!list || !list.length) { toast('That file is not a Slate export or backup'); return; }
+    ui.importList = list;
+    var cur = list.filter(function (r) { return mkey(new Date(r.ts)) === state.month; }).length, past = list.filter(function (r) { return mkey(new Date(r.ts)) < state.month; }).length;
+    sheet('<div class="hd"><b>Import this export?</b><button class="x" data-act="close">✕</button></div><div class="card"><b>' + list.length + ' entries found</b><div class="mute small" style="margin-top:4px">' +
+      (cur ? cur + ' from ' + mname(state.month) : '') + (cur && past ? ' · ' : '') + (past ? past + ' from earlier months, which go into the Archive' : '') + '</div></div>' +
+      '<p class="mute small" style="margin:0 2px 12px">Slate matches each entry to the spend it already read from your bank SMS and copies over your category and note, so you do not sort anything twice. Entries it cannot find, like cash you typed in, are added. Importing the same file twice does not create duplicates.</p>' +
+      '<button class="btn pri" data-act="importGo">Import</button><button class="btn" data-act="close">Cancel</button>', 'import');
   }
 
   // ---------- layers ----------
@@ -914,7 +998,7 @@
       '<div class="kv" data-act="goArch"><span><b>Archive</b><br><span class="mute small">' + (state.archive.length ? state.archive.length + ' past month' + (state.archive.length === 1 ? '' : 's') + ' kept' : 'Past months are kept here') + '</span></span><span class="mute">›</span></div>' +
       '<div class="kv"><span><b>Also save a spreadsheet on the 1st</b><br><span class="mute small">A CSV copy of the month in Downloads, on top of the Archive</span></span><button class="sw' + (state.autoCsv !== false ? ' on' : '') + '" data-act="autoCsv" aria-label="Spreadsheet on the 1st"></button></div>' +
       '<div class="kv" data-act="backup"><span><b>Back up everything</b><br><span class="mute small">One file you can restore on any phone</span></span><span class="mute">›</span></div>' +
-      '<div class="kv" data-act="restore"><span><b>Restore from a backup</b></span><span class="mute">›</span></div>' +
+      '<div class="kv" data-act="importStart"><span><b>Import an export or backup</b><br><span class="mute small">A Slate spreadsheet (any version) or backup file. Your categories and notes come back</span></span><span class="mute">›</span></div>' +
       '<div class="kv" data-act="wipe"><span><b style="color:var(--red)">Start the month over</b><br><span class="mute small">Moves this month to the Archive, then clears the screen</span></span><span class="mute">›</span></div></div>' +
       '<p class="mute small" style="margin:4px 4px 0">On the 1st, Slate moves the month into the Archive and gives you a clean screen. Nothing is thrown away. It has no internet access, so nothing leaves this phone.</p>', 'settings');
   }
@@ -1009,6 +1093,13 @@
     keepSet: function (v) { state.keepMonths = +v; save(); closeSheet(); archiveLayer(); },
     backup: function () { var ok = false; try { ok = A.saveToDownloads('Slate-backup-' + iso(Date.now()) + '.json', 'application/json', JSON.stringify({ app: 'slate', kind: 'backup', at: Date.now(), state: state })); } catch (x) { } toast(ok ? 'Backup saved to Downloads' : 'Could not save the backup'); if (ok) hap(1); },
     restore: function () { try { A.pickBackup(); } catch (x) { toast('Restoring needs the latest Slate'); } },
+    importGo: function () {
+      var list = ui.importList; if (!list) return; ui.importList = null;
+      if (state.onboarded && A.hasSmsPermission()) scan(false);       // read the latest SMS first so more entries match
+      var r = importRows(list); save(); closeSheet(); if (ui.layer) closeFull(); renderA(); confetti(80);
+      toast(r.matched + ' matched · ' + r.added + ' added' + (r.past ? ' · ' + r.past + ' to the Archive' : '') + (r.cats.length ? ' · ' + r.cats.length + ' new categor' + (r.cats.length === 1 ? 'y' : 'ies') : ''));
+    },
+    importStart: function () { closeSheet(); try { A.pickBackup(); } catch (x) { toast('Importing needs the latest Slate'); } },
     restoreGo: function () {
       var o = ui.restoreData; if (!o) return; ACT.backup(); ui.restoreData = null;
       for (var k in o) state[k] = o[k]; load2(); rollover(); save(); closeSheet(); closeFull(); applyLook(); renderA(); confetti(90); toast('Restored');
@@ -1100,8 +1191,8 @@
 
   window.onNative = function (what, val) {
     if (what === 'perm') { ui.perm = !!val; ui.denied = !val; if (val) { scan(false); if (!state.budget) budgetSheet(true); } else render(); }
-    else if (what === 'restore') {
-      if (val == null) return;
+    else if (what === 'restore') { if (val == null) return; if (!val) { toast('Could not open that file'); return; } importFile(val); }
+    else if (what === 'backupFile') {
       var o = null; try { o = JSON.parse(val); } catch (x) { }
       if (!o || o.app !== 'slate' || !o.state || !Array.isArray(o.state.txns)) { toast('That is not a Slate backup file'); return; }
       ui.restoreData = o.state; var d = new Date(o.at || Date.now()), ar = (o.state.archive || []).length;

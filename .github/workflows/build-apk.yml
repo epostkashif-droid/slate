@@ -1,23 +1,51 @@
 name: Build test APK
 
 # Builds a sideload Slate.apk with Google's official Android SDK on GitHub's runners.
-# This is a TEST build for your own phone, not the Play upload (that still uses build-play.sh and your upload key).
+# TEST build for your own phone; the Play upload still uses build-play.sh and your upload key.
+#
+# Signing key, most durable first:
+#   1. Repo secret SLATE_KEYSTORE_B64 (base64 of the .jks) + SLATE_KEYSTORE_PASS, if you add them
+#   2. The key kept in the Actions cache (created once, saved immediately, kept alive weekly)
+# The key is never committed. An encrypted copy is published to the builds branch so it can be handed to you.
 on:
   push:
-    branches: ['slate-v2-visuals-archive', 'main']
+    branches: ['main', 'slate-v2-visuals-archive']
+    paths-ignore: ['README.md', 'docs/**']
   workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'      # weekly: touches the cached key so GitHub never expires it
 
 permissions:
   contents: write
 
+concurrency:
+  group: build-apk
+  cancel-in-progress: false
+
+env:
+  KS: /home/runner/.slate-key/test.jks
+  CACHE_KEY: slate-test-signing-key-v2
+
 jobs:
+  keep-key-alive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/.slate-key
+          key: ${{ env.CACHE_KEY }}
+
   apk:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17' }
+        with:
+          distribution: temurin
+          java-version: '17'
 
       - name: Android SDK pieces
         run: |
@@ -25,44 +53,84 @@ jobs:
           echo "BT=$ANDROID_HOME/build-tools/36.0.0" >> "$GITHUB_ENV"
           echo "AJ=$ANDROID_HOME/platforms/android-36/android.jar" >> "$GITHUB_ENV"
 
-      # The test signing key is kept in the Actions cache, never in git, so every build can update the last one in place.
-      - name: Restore test signing key
-        uses: actions/cache@v4
-        with:
-          path: ~/.slate-test-key
-          key: slate-test-signing-key-v1
-
-      - name: Create test signing key if missing
+      - name: Signing key from repo secret (if set)
+        env:
+          KS_B64: ${{ secrets.SLATE_KEYSTORE_B64 }}
+          KS_PASS_SECRET: ${{ secrets.SLATE_KEYSTORE_PASS }}
         run: |
-          mkdir -p ~/.slate-test-key
-          [ -f ~/.slate-test-key/test.jks ] || keytool -genkeypair -keystore ~/.slate-test-key/test.jks -storepass slatetest -keypass slatetest \
-            -alias slatetest -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Slate test build"
+          mkdir -p "$(dirname "$KS")"
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$KS"
+            echo "KS_PASS=${KS_PASS_SECRET:-slatetest}" >> "$GITHUB_ENV"
+            echo "KEY_FROM=secret" >> "$GITHUB_ENV"
+          else
+            echo "KS_PASS=slatetest" >> "$GITHUB_ENV"
+            echo "KEY_FROM=cache" >> "$GITHUB_ENV"
+          fi
+
+      - name: Restore signing key from cache
+        if: env.KEY_FROM == 'cache'
+        id: keycache
+        uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/.slate-key
+          key: ${{ env.CACHE_KEY }}
+
+      - name: Create the signing key (first run only)
+        if: env.KEY_FROM == 'cache' && steps.keycache.outputs.cache-hit != 'true'
+        run: |
+          keytool -genkeypair -keystore "$KS" -storepass "$KS_PASS" -keypass "$KS_PASS" -alias slatetest \
+            -keyalg RSA -keysize 2048 -validity 20000 -dname "CN=Slate, O=Kay Builds, L=Chennai, C=IN"
+
+      # Saved straight away, so a later failing step can never lose the key.
+      - name: Save the new signing key
+        if: env.KEY_FROM == 'cache' && steps.keycache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.slate-key
+          key: ${{ env.CACHE_KEY }}
 
       - name: Build and sign
         run: |
           set -e
-          V=$((100 + GITHUB_RUN_NUMBER)); B=/tmp/b; mkdir -p $B/classes $B/dex
-          javac -source 8 -target 8 -bootclasspath "$AJ" -d $B/classes app/src/main/java/com/kaybuilds/slate/*.java
+          V=$((200 + GITHUB_RUN_NUMBER)); B=/tmp/b; rm -rf $B; mkdir -p $B/classes $B/dex
+          javac -nowarn -source 8 -target 8 -bootclasspath "$AJ" -d $B/classes app/src/main/java/com/kaybuilds/slate/*.java
           "$BT/d8" --min-api 26 --lib "$AJ" --output $B/dex $(find $B/classes -name '*.class')
           sed "s#<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">#<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"com.kaybuilds.slate\" android:versionCode=\"$V\" android:versionName=\"2.0.$V\"><uses-sdk android:minSdkVersion=\"29\" android:targetSdkVersion=\"36\" />#" app/src/main/AndroidManifest.xml > $B/AndroidManifest.xml
           "$BT/aapt2" compile --dir app/src/main/res -o $B/res.zip
           "$BT/aapt2" link -o $B/unsigned.apk -I "$AJ" --manifest $B/AndroidManifest.xml -A app/src/main/assets --min-sdk-version 29 --target-sdk-version 36 $B/res.zip
           (cd $B/dex && zip -q ../unsigned.apk classes.dex)
           "$BT/zipalign" -f -p 4 $B/unsigned.apk $B/aligned.apk
-          "$BT/apksigner" sign --ks ~/.slate-test-key/test.jks --ks-pass pass:slatetest --key-pass pass:slatetest --ks-key-alias slatetest --out Slate.apk $B/aligned.apk
-          "$BT/apksigner" verify Slate.apk
-          "$BT/aapt2" dump badging Slate.apk | head -3
+          ALIAS=$(keytool -list -keystore "$KS" -storepass "$KS_PASS" | awk -F, '/PrivateKeyEntry/{print $1; exit}')
+          "$BT/apksigner" sign --ks "$KS" --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" --ks-key-alias "$ALIAS" --out Slate.apk $B/aligned.apk
+          "$BT/apksigner" verify --print-certs Slate.apk
+          "$BT/aapt2" dump badging Slate.apk | head -2
           echo "V=$V" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v4
-        with: { name: Slate-apk, path: Slate.apk }
+        with:
+          name: Slate-apk
+          path: Slate.apk
 
-      - name: Publish as a release (downloadable on your phone)
-        env: { GH_TOKEN: '${{ github.token }}' }
-        run: gh release create "test-$V" Slate.apk --target "$GITHUB_SHA" --prerelease --title "Slate test build $V" --notes "Sideload test build from ${GITHUB_REF_NAME}. Not the Play Store build."
-
-      - name: Also keep the APK on the builds branch
+      - name: Publish to the builds branch (APK, version, encrypted key copy)
         run: |
-          git config user.name "slate-ci"; git config user.email "ci@users.noreply.github.com"
-          mkdir -p /tmp/pub && cp Slate.apk /tmp/pub/Slate.apk && cd /tmp/pub && git init -q -b builds && git add -f Slate.apk && git commit -qm "Test build $V" \
-            && git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" builds
+          set -e
+          P=/tmp/pub; rm -rf $P; mkdir -p $P; cp Slate.apk $P/Slate.apk; echo "$V" > $P/VERSION
+          "$BT/apksigner" verify --print-certs Slate.apk | grep -i "SHA-256" | head -1 > $P/SIGNER.txt
+          openssl cms -encrypt -binary -aes256 -outform DER -in "$KS" -out $P/signing-key.enc ci/key-export-cert.pem
+          cd $P
+          git init -q -b builds
+          git -c user.name="slate-ci" -c user.email="ci@users.noreply.github.com" add -A
+          git -c user.name="slate-ci" -c user.email="ci@users.noreply.github.com" commit -qm "Test build $V"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" builds
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Publish as a release (download on your phone)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete test-101 --yes --cleanup-tag -R "$GITHUB_REPOSITORY" 2>/dev/null || true   # signed with a key that was lost
+          gh release create "test-$V" Slate.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Slate test build $V" --notes "Sideload test build. Not the Play Store build."

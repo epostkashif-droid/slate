@@ -205,7 +205,6 @@ public class MainActivity extends Activity {
                 Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
                 i.setType("*/*");
-                i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/json", "text/plain", "application/octet-stream"});
                 try { startActivityForResult(i, REQ_RESTORE); } catch (Exception e) { js("window.onNative('restore', '')"); }
             } });
         }

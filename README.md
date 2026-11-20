@@ -9,6 +9,7 @@ Know what's safe to spend today. Slate reads the transaction SMS your bank alrea
 - **A clean slate every month, nothing lost**: on the 1st the month moves to an in-app **Archive** (wrap, donut, calendar and every spend, read-only, exportable), with an optional spreadsheet copy in Downloads and a shareable month wrap
 - **Your own categories**: 19 starters plus any you add, with emoji, colour, an optional monthly cap, reordering and hiding; create one straight from the picker
 - **Live visuals**: a liquid "tank" of what is left, pace vs. the month, a donut, "every ₹100", a spending calendar, month-by-month bars, a wallet pocket for balances and a "truly free to use" waterfall
+- **Goals & wishlist**: animated jars that fill as you save, coin-drop and milestone confetti at 25/50/75/100%, what it takes per day or month to hit a date, a coffee-skip nudge, an evening offer to stash today's unspent money, and "can I afford it yet?" for wishlist items
 - **Backup and restore**: one file with every month and setting, restorable on a new phone
 - **Four looks × eight colours**: Classic, Sway, Paper and Glow; Emerald, Ocean, Grape, Teal, Sunset, Rose, Graphite and an animated Aurora; Auto/Light/Dark; Lively or Calm motion (confetti, ripples, haptics)
 - **Private by design**: no account, no cloud, no internet permission

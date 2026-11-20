@@ -120,9 +120,10 @@
     var daysLeft = dim() - n.getDate() + 1, o = { spentMonth: spentMonth, spentToday: spentToday, daysLeft: daysLeft, day: n.getDate(), dim: dim(), budget: state.budget };
     o.moneyIn = sum(state.txns.filter(function (t) { return t.dir === 'in' && t.b !== 'moved'; }));
     var fx = fxState(); o.reserve = fx.reserve; o.fx = fx;
+    var gm = goalMonth(); o.goalsMonth = gm.month; o.goalsToday = gm.today;
     if (state.budget > 0) {
-      o.allow = Math.max((state.budget - fx.reserve - (spentMonth - spentToday)) / daysLeft, 0);
-      o.leftToday = o.allow - spentToday; o.leftMonth = state.budget - spentMonth - fx.reserve;
+      o.allow = Math.max((state.budget - fx.reserve - (gm.month - gm.today) - (spentMonth - spentToday)) / daysLeft, 0);
+      o.leftToday = o.allow - spentToday - gm.today; o.leftMonth = state.budget - spentMonth - fx.reserve - gm.month;
       o.tomorrow = daysLeft > 1 ? Math.max(o.leftMonth / (daysLeft - 1), 0) : 0;
       o.mood = o.leftMonth < 0 || o.leftToday < 0 ? 'over' : (o.allow > 0 && spentToday / o.allow > 0.8) ? 'tight' : 'good';
     } else o.mood = 'plain';
@@ -145,7 +146,7 @@
 
   // ---------- storage ----------
   function load() { try { var s = A.loadData(); if (s) { var o = JSON.parse(s); for (var k in o) state[k] = o[k]; } } catch (e) { } load2(); }
-  function load2() { if (!Array.isArray(state.txns)) state.txns = []; if (!state.rules) state.rules = {}; if (!state.deleted) state.deleted = {}; if (!Array.isArray(state.fixed)) state.fixed = []; if (!Array.isArray(state.iou)) state.iou = []; if (!state.accts) state.accts = {}; if (!state.alias) state.alias = {}; if (!Array.isArray(state.archive)) state.archive = []; initCats(); ensureAccts(); }
+  function load2() { if (!Array.isArray(state.txns)) state.txns = []; if (!Array.isArray(state.goals)) state.goals = []; if (!state.rules) state.rules = {}; if (!state.deleted) state.deleted = {}; if (!Array.isArray(state.fixed)) state.fixed = []; if (!Array.isArray(state.iou)) state.iou = []; if (!state.accts) state.accts = {}; if (!state.alias) state.alias = {}; if (!Array.isArray(state.archive)) state.archive = []; initCats(); ensureAccts(); }
   var saveT;
   function pushLive() {
     var c = calc(), n = new Date(), known = P.KNOWN_WORDS.concat(Object.keys(state.rules)).filter(function (w) { return w.length >= 4; });
@@ -232,7 +233,7 @@
       row('go', 'today', '☀️', 'Today', 'What is safe to spend') + row('go', 'bals', '💰', 'Balances', bt.set ? inr(bt.have) + ' in hand' + (bt.owe ? ' · ' + inr(bt.owe) + ' on cards' : '') : 'Enter them once') +
       row('go', 'month', '📊', mname(state.month), 'Where it went, day by day') + '</div><div class="card" style="padding:4px 16px">' +
       (n ? row('goSort', '', '❓', 'Sort spends', n + ' waiting') : '') + row('goFixed', '', '📌', 'Fixed payments', state.fixed.length ? fx.nPaid + ' of ' + state.fixed.length + ' paid' : 'EMIs, rent, fees') +
-      row('goIou', '', '🤝', 'Lent & borrowed', io.n ? io.n + ' open' : 'Track who owes whom') + row('goCats', '', '🏷️', 'Categories', state.cats.length + ' · add your own') +
+      row('goIou', '', '🤝', 'Lent & borrowed', io.n ? io.n + ' open' : 'Track who owes whom') + row('goGoals', '', '🎯', 'Goals & wishlist', goals().length ? inr(goalsSaved()) + ' saved' : 'Save for what you want') + row('goCats', '', '🏷️', 'Categories', state.cats.length + ' · add your own') +
       row('goArch', '', '🗂️', 'Archive', state.archive.length ? state.archive.length + ' month' + (state.archive.length === 1 ? '' : 's') + ' kept' : 'Past months live here') + row('dkTheme', '', '🎨', 'Colour & mode', THEMES[state.theme] ? THEMES[state.theme][0] : 'Emerald') + row('goSettings', '', '⚙️', 'Settings', 'Limit, notifications, export') + '</div>', 'menu');
   }
   function pc(t) {       // a spend as a card
@@ -260,12 +261,12 @@
     var c = calc(), n = new Date(), ts = toSort(), h;
     h = '<div class="top"><div><h1>Slate</h1><div class="sub">' + DOW[n.getDay()] + ', ' + n.getDate() + ' ' + mname(state.month) + '</div></div><button class="icon" data-act="settings" aria-label="Settings"><svg viewBox="0 0 24 24">' + IC.gear + '</svg></button></div>';
     h += hero(c);
-    h += glance(c) + capChips();
+    h += glance(c) + capChips() + goalsStrip(c);
     h += '<div class="facts"><div class="fact"><div class="k">Today</div><div class="v num">' + inr(c.spentToday) + '</div></div><div class="fact"><div class="k">Per day so far</div><div class="v num">' + inr(c.spentMonth / c.day) + '</div></div>' +
       '<div class="fact"><div class="k">' + (state.budget > 0 ? 'Streak' : 'No-spend days') + '</div><div class="v">' + (state.budget > 0 ? (c.streak ? '🔥 ' + c.streak + ' day' + (c.streak === 1 ? '' : 's') : '—') : c.zero) + '</div></div></div>';
     if (ts.length) h += '<button class="sortpill" data-act="sort"><span class="n">' + ts.length + '</span><span class="grow"><b>Sort ' + (ts.length === 1 ? 'this spend' : 'these spends') + '</b><span class="s">One tap each. Slate remembers for next time.</span></span><span>›</span></button>';
     var bt = balTotals();
-    var free = bt.have - bt.owe - c.reserve - iouTotals().owe;
+    var free = bt.have - bt.owe - c.reserve - iouTotals().owe - goalsSaved();
     h += '<button class="slim" data-act="tab" data-v="bals"><span class="grow">' + (bt.set ? '💰 <b class="num">' + inr(bt.have) + '</b> in hand · <b class="num" style="color:' + (free < 0 ? 'var(--red)' : 'var(--accent)') + '">' + inr(free) + '</b> truly free' : '💰 Enter your balances once and Slate keeps them current') + '</span><span>›</span></button>';
     var fx = c.fx, io = iouTotals();
     h += '<div class="duo"><button class="tile" data-act="fixed"><span class="k">📌 Fixed payments</span>' + (state.fixed.length ? '<b class="num">' + fx.nPaid + ' of ' + state.fixed.length + ' paid</b><span class="s">' + (fx.reserve ? inr(fx.reserve) + ' to go' : 'All done this month') + '</span>' : '<b>Add EMIs, rent…</b><span class="s">Slate sets them aside for you</span>') + '</button>' +
@@ -342,7 +343,7 @@
     var sub = c.mood === 'plain' ? inr(c.spentMonth) + ' so far in ' + mname(state.month) : (c.leftMonth >= 0 ? inr(c.leftMonth) + ' left for ' + c.daysLeft + ' day' + (c.daysLeft === 1 ? '' : 's') : inr(-c.leftMonth) + ' over this month') + (c.streak ? ' · 🔥 ' + c.streak : '');
     h = head(label, title, sub, cls);
     if (c.mood === 'plain') h += '<div style="text-align:center;margin:-6px 0 14px"><button class="btn pri" style="display:inline-block;width:auto" data-act="budget">Set a monthly limit</button></div>';
-    h += '<div class="tl">' + rail(c) + '<div class="col"><div class="swg">' + glance(c) + capChips() + '</div>';
+    h += '<div class="tl">' + rail(c) + '<div class="col"><div class="swg">' + glance(c) + capChips() + goalsStrip(c) + '</div>';
     var td = state.txns.filter(function (t) { return t.ts >= today; }), bt = balTotals(), fx = c.fx, io = iouTotals();
     h += sec(c.mood === 'over' ? 'red' : c.mood === 'tight' ? 'amber' : 'green', td.length, 'Today', c.spentToday ? inr(c.spentToday) : '', td.length ? td.map(pc).join('') : '<div class="pc ghost"><div class="pt">Nothing spent yet today</div><div class="pm">Spends land here as your bank texts you</div></div>');
     if (ts.length) h += sec('ink', ts.length, 'To sort', '', ts.slice(0, 10).map(function (t) { return pc(t).replace('data-act="edit"', 'data-act="sortOne"'); }).join(''));
@@ -597,8 +598,8 @@
   function moneyFlow() {
     var bt = balTotals(); if (!bt.set) return '';
     var fx = fxState(), io = iouTotals(), free = bt.have - bt.owe - fx.reserve - io.owe, steps = [['In bank and cash', bt.have, 'pos']];
-    if (bt.owe) steps.push(['Card dues', -bt.owe, 'neg']); if (fx.reserve) steps.push(['Fixed payments still due', -fx.reserve, 'neg']); if (io.owe) steps.push(['Money you owe people', -io.owe, 'neg']);
-    var max = Math.max(bt.have, 1), at = 0, h = '<div class="card flow"><h2>Truly free to use</h2><div class="fbig num ' + (free < 0 ? 'neg' : '') + '" data-count="' + Math.abs(free) + '">' + inr(free) + '</div><div class="mute small" style="margin-bottom:10px">What is left after card dues, fixed payments and IOUs</div>';
+    if (bt.owe) steps.push(['Card dues', -bt.owe, 'neg']); if (fx.reserve) steps.push(['Fixed payments still due', -fx.reserve, 'neg']); if (io.owe) steps.push(['Money you owe people', -io.owe, 'neg']); var gsv = goalsSaved(); if (gsv) steps.push(['Set aside for goals', -gsv, 'goal']); free -= gsv;
+    var max = Math.max(bt.have, 1), at = 0, h = '<div class="card flow"><h2>Truly free to use</h2><div class="fbig num ' + (free < 0 ? 'neg' : '') + '" data-count="' + Math.abs(free) + '">' + inr(free) + '</div><div class="mute small" style="margin-bottom:10px">What is left after card dues, fixed payments, IOUs and goal savings</div>';
     steps.forEach(function (s, i) {
       var w = Math.abs(s[1]) / max * 100, left = s[1] >= 0 ? at : Math.max(at - w, 0); if (s[1] < 0) w = Math.min(w, at); at = s[1] >= 0 ? at + w : left;
       h += '<div class="fl"><span class="ell">' + s[0] + '</span><div class="ft"><i class="' + s[2] + '" style="left:' + left.toFixed(1) + '%;width:' + Math.max(w, .8).toFixed(1) + '%;--i:' + i + '"></i></div><b class="num">' + (s[1] < 0 ? '−' : '') + kfmt(Math.abs(s[1])) + '</b></div>';
@@ -702,7 +703,7 @@
   function dockHtml() {
     var n = toSort().length;
     function b(act, ic, label, badge) { return '<button data-act="' + act + '" aria-label="' + label + '"><span>' + ic + '</span><em>' + label + '</em>' + (badge ? '<u>' + badge + '</u>' : '') + '</button>'; }
-    return '<div class="dock' + (ui.dock ? ' open' : '') + '"><div class="dkl">' + b('dkSort', '❓', 'Sort', n) + b('dkCats', '🏷️', 'Categories') + b('dkArch', '🗂️', 'Archive') + b('dkTheme', '🎨', 'Colours') + b('dkFixed', '📌', 'Fixed') + '</div>' +
+    return '<div class="dock' + (ui.dock ? ' open' : '') + '"><div class="dkl">' + b('dkSort', '❓', 'Sort', n) + b('dkGoals', '🎯', 'Goals') + b('dkCats', '🏷️', 'Categories') + b('dkArch', '🗂️', 'Archive') + b('dkTheme', '🎨', 'Colours') + b('dkFixed', '📌', 'Fixed') + '</div>' +
       '<button class="dkb" data-act="dock" aria-label="Quick menu"><i></i><i></i><i></i></button></div>';
   }
 
@@ -823,6 +824,128 @@
       (cur ? cur + ' from ' + mname(state.month) : '') + (cur && past ? ' · ' : '') + (past ? past + ' from earlier months, which go into the Archive' : '') + '</div></div>' +
       '<p class="mute small" style="margin:0 2px 12px">Slate matches each entry to the spend it already read from your bank SMS and copies over your category and note, so you do not sort anything twice. Entries it cannot find, like cash you typed in, are added. Importing the same file twice does not create duplicates.</p>' +
       '<button class="btn pri" data-act="importGo">Import</button><button class="btn" data-act="close">Cancel</button>', 'import');
+  }
+
+  // ---------- goals & wishlist: jars that fill as you save ----------
+  var GEMO = '🎯 🏍️ 🚗 📱 💻 🎧 ⌚ 📷 🎮 ✈️ 🏖️ 🕋 🕌 🏠 🛋️ 💍 👗 👟 🎓 📚 👶 🎁 🎉 🩺 🛟 💰 🌱 🐶 🚲 🏋️'.split(' ');
+  function goals() { if (!Array.isArray(state.goals)) state.goals = []; return state.goals; }
+  function gPct(g) { return g.target > 0 ? Math.min(g.saved / g.target, 1) : 0; }
+  function gLeft(g) { return Math.max(g.target - g.saved, 0); }
+  function gRate(g) {          // average saved per day since the first deposit
+    var tot = 0, first = 0, n = 0; (g.log || []).forEach(function (l) { if (l.start) return; tot += l.amt; if (l.amt > 0) { n++; if (!first || l.ts < first) first = l.ts; } });
+    if (!first || tot <= 0 || n < 2 || Date.now() - first < 14 * 864e5) return 0;   // need a couple of weeks of saving before guessing a pace
+    return tot / ((Date.now() - first) / 864e5);
+  }
+  function dur(days) { days = Math.ceil(days); return days <= 1 ? 'a day' : days < 45 ? days + ' days' : days < 700 ? Math.round(days / 30.4) + ' months' : (days / 365).toFixed(1) + ' years'; }
+  function gPlan(g) {
+    var left = gLeft(g); if (!left) return 'Reached 🎉';
+    if (g.due) {
+      var a = g.due.split('-'), end = new Date(+a[0], +a[1], 0, 23, 59), days = (end - Date.now()) / 864e5;
+      if (days <= 0) return inr(left) + ' to go · date passed';
+      return (days > 62 ? inr(Math.ceil(left / (days / 30.4))) + ' a month' : inr(Math.ceil(left / days)) + ' a day') + ' to make it by ' + mlong(g.due);
+    }
+    var r = gRate(g); return r ? 'At your pace, about ' + dur(left / r) + ' to go' : inr(left) + ' to go';
+  }
+  function goalMonth() {      // leftovers stashed from this month's spending come off the month, like fixed payments
+    var m = 0, d = 0, t0 = sod(Date.now()), ms = new Date(); ms = new Date(ms.getFullYear(), ms.getMonth(), 1).getTime();
+    goals().forEach(function (g) { (g.log || []).forEach(function (l) { if (l.src === 'stash' && l.ts >= ms) { m += l.amt; if (l.ts >= t0) d += l.amt; } }); });
+    return { month: Math.max(m, 0), today: Math.max(d, 0) };
+  }
+  function goalsSaved() { var s = 0; goals().forEach(function (g) { s += g.saved; }); return s; }
+  var jarN = 0;
+  var JAR = 'M24 36 Q24 28 32 28 H78 Q86 28 86 36 V126 Q86 144 68 144 H42 Q24 144 24 126 Z';
+  function jarSvg(g, cls) {
+    var id = 'jr' + (++jarN), p = gPct(g), y = 30 + (1 - p) * 112, start = ui.anim && !calm() ? 150 : y;
+    return '<svg class="jar ' + (cls || '') + '" viewBox="0 0 110 150" aria-hidden="true"><defs><clipPath id="' + id + '"><path d="' + JAR + '"/></clipPath></defs>' +
+      '<path class="jglass" d="' + JAR + '"/><rect x="30" y="14" width="50" height="14" rx="5" style="fill:' + g.color + '"/><rect x="36" y="9" width="38" height="7" rx="3" style="fill:' + g.color + ';opacity:.6"/>' +
+      '<g clip-path="url(#' + id + ')"><g class="lvl" data-y="' + y.toFixed(1) + '" style="transform:translateY(' + start.toFixed(1) + 'px)">' +
+      '<path class="w2" style="fill:' + g.color + '" d="' + wavePath(1) + '"/><path class="w1" style="fill:' + g.color + '" d="' + wavePath(0) + '"/>' +
+      (p > .05 ? '<circle class="bb b1" cx="40" cy="70" r="2.6"/><circle class="bb b2" cx="66" cy="84" r="2"/><circle class="bb b3" cx="56" cy="62" r="2.4"/>' : '') + '</g></g>' +
+      '<path class="shine" d="M34 46 Q31 84 34 120"/><text class="jemo" x="55" y="96" text-anchor="middle">' + (p >= 1 ? '✓' : g.emoji) + '</text></svg>';
+  }
+  function goalCard(g) {
+    return '<button class="gcard' + (gPct(g) >= 1 ? ' done' : '') + '" data-act="goalOpen" data-v="' + g.id + '" style="--gc:' + g.color + '">' + jarSvg(g) +
+      '<b class="ell">' + esc(g.name) + '</b><span class="num">' + inr(g.saved) + ' <i>of ' + kfmt(g.target) + '</i></span><span class="gbar"><i style="width:' + (gPct(g) * 100).toFixed(1) + '%"></i></span><span class="gplan">' + gPlan(g) + '</span></button>';
+  }
+  function stashOffer(c) {      // after 6 pm, offer today's unspent share to a goal
+    var open = goals().filter(function (g) { return gPct(g) < 1; });
+    if (!open.length || !(state.budget > 0) || !(c.leftToday >= 50) || new Date().getHours() < 18 || state.stashDay === iso(Date.now())) return '';
+    var g = open[0], amt = Math.floor(c.leftToday / 10) * 10;
+    return '<div class="stash" style="--gc:' + g.color + '"><span class="se">' + g.emoji + '</span><span class="grow"><b>' + inr(amt) + ' of today is still unspent</b><span class="mute small">Stash it in ' + esc(g.name) + ' and it is ' + Math.min(Math.round(amt / Math.max(g.target, 1) * 1000) / 10, 100) + '% closer</span></span><button class="chip" data-act="stash" data-v="' + g.id + '|' + amt + '">Stash</button><button class="x" data-act="stashNo" aria-label="Not today">✕</button></div>';
+  }
+  function goalsStrip(c) {
+    var gs = goals();
+    if (!gs.length) return '<button class="card gstrip empty" data-act="goGoals"><span class="gi2">' + jarSvg({ emoji: '🎯', color: '#94a3b8', saved: 6, target: 10 }, 'mini ghost') + '</span><span class="grow"><b>Saving for something?</b><span class="mute small">A bike, a trip, Umrah, a new phone. Add a goal and watch its jar fill every time you put money aside.</span><span class="chip">Start a goal ›</span></span></button>';
+    var open = gs.filter(function (g) { return gPct(g) < 1; }).concat(gs.filter(function (g) { return gPct(g) >= 1; }));
+    return stashOffer(c) + '<div class="card gstrip"><div class="row" style="margin-bottom:8px"><h2 class="grow" style="margin:0">Goals & wishlist</h2><button class="lnk" data-act="goGoals">All ›</button></div><div class="gscroll">' +
+      open.slice(0, 6).map(function (g) { return '<button class="gmini" data-act="goalOpen" data-v="' + g.id + '">' + jarSvg(g, 'mini') + '<span class="ell">' + esc(g.name) + '</span><b class="num">' + Math.round(gPct(g) * 100) + '%</b></button>'; }).join('') +
+      '<button class="gmini add" data-act="goalNew"><span class="plus">＋</span><span>New goal</span></button></div></div>';
+  }
+  function goalsLayer() {
+    var gs = goals(), saved = goalsSaved(), tgt = 0; gs.forEach(function (g) { tgt += g.target; });
+    var open = gs.filter(function (g) { return gPct(g) < 1; }), done = gs.filter(function (g) { return gPct(g) >= 1; });
+    var h = '<div class="row"><b class="grow" style="font-size:18px">Goals & wishlist</b><button class="x" data-act="closeFull">✕</button></div>';
+    h += '<div class="ghero"><span class="mute2">Saved towards your dreams</span><b class="num" data-count="' + saved + '">' + inr(saved) + '</b><span class="mute2">' + (gs.length ? 'across ' + gs.length + ' goal' + (gs.length === 1 ? '' : 's') + (tgt ? ' · ' + Math.round(saved / tgt * 100) + '% of everything you want' : '') : 'Every jar starts with one coin') + '</span>' +
+      '<div class="coinrain" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div>';
+    h += '<button class="btn pri" data-act="goalNew">＋ New goal or wish</button>';
+    if (open.length) h += '<div class="ggrid">' + open.map(goalCard).join('') + '</div>';
+    if (done.length) h += '<div class="day" style="margin-top:16px"><span>Reached 🎉</span></div><div class="ggrid">' + done.map(goalCard).join('') + '</div>';
+    if (!gs.length) h += '<div class="card" style="margin-top:12px"><div class="empty" style="padding:10px 4px">Name the thing you want, set its price, and add a little whenever you can. Slate shows how close you are and what it takes to get there.</div></div>';
+    h += '<p class="mute small" style="margin:14px 4px 0">Money you put in a goal stays in your bank. Slate keeps it out of your "truly free" money so you are not tempted to spend it. Leftovers you stash from a day also come off this month\'s limit.</p>';
+    full(h, 'goals');
+    animIn(document.getElementById('full'));
+  }
+  function goalSheet(g) {
+    ui.goal = g; var left = gLeft(g), r = gRate(g), wish = g.kind === 'wish';
+    var h = '<div class="hd"><b class="ell">' + g.emoji + ' ' + esc(g.name) + '</b><button class="x" data-act="close">✕</button></div>';
+    h += '<div class="gdet" style="--gc:' + g.color + '"><div class="jarwrap" id="jarwrap">' + jarSvg(g, 'big') + '</div><div class="grow"><span class="mute small" style="font-weight:700">' + (wish ? 'SAVED FOR IT' : 'SAVED') + '</span>' +
+      '<b class="num gbig" id="gSaved">' + inr(g.saved) + '</b><span class="mute small">of ' + inr(g.target) + '</span><span class="gbar big"><i id="gBar" style="width:' + (gPct(g) * 100).toFixed(1) + '%"></i></span>' +
+      '<b class="num gpct" id="gPct">' + Math.round(gPct(g) * 100) + '%</b><span class="gplan" id="gPlan">' + gPlan(g) + '</span></div></div>';
+    if (left > 0) {
+      h += '<label class="f">Put money in</label><div class="qadd">' + [100, 500, 1000, 5000].filter(function (v) { return v <= Math.max(left, 100) * 1.01 || v === 100; }).map(function (v) { return '<button data-act="gAdd" data-v="' + v + '">+' + kfmt(v) + '</button>'; }).join('') + '</div>' +
+        '<div class="row" style="gap:8px;margin-top:8px"><input type="number" id="gAmt" inputmode="numeric" placeholder="Any amount" style="flex:1"><button class="btn pri" style="width:auto;margin:0;padding:0 20px" data-act="gAddAmt">Add</button></div>';
+      var coffee = 160, perDay = coffee * 5 / 7, now = r ? left / r : 0, soon = left / (r + perDay);
+      h += '<div class="insp"><span>☕</span><span>' + (r ? 'Skip a ₹160 coffee five days a week and you get here <b>' + dur(now - soon) + ' sooner</b>.' : 'Skipping a ₹160 coffee five days a week gets you here in about <b>' + dur(left / perDay) + '</b>.') + '</span></div>';
+      if (wish) { var free = trulyFree(); h += '<div class="insp"><span>🛍️</span><span>' + (free >= left ? 'You could cover the rest (' + inr(left) + ') from free money today, leaving ' + inr(free - left) + ' truly free.' : 'Not yet. You would need ' + inr(left - Math.max(free, 0)) + ' more than you have free right now.') + '</span></div>'; }
+    } else h += '<div class="insp done"><span>🏆</span><span>You did it. ' + (wish ? 'Enjoy it, you saved for it properly.' : 'Goal reached.') + '</span></div>';
+    var log = (g.log || []).slice(-5).reverse();
+    if (log.length) h += '<label class="f">Recent</label><div class="card" style="padding:2px 14px">' + log.map(function (l) { var d = new Date(l.ts); return '<div class="kv"><span>' + d.getDate() + ' ' + MON[d.getMonth()].slice(0, 3) + '</span><b class="num" style="color:' + (l.amt < 0 ? 'var(--red)' : 'var(--accent)') + '">' + (l.amt < 0 ? '−' : '+') + inr(Math.abs(l.amt)) + '</b></div>'; }).join('') + '</div>';
+    h += '<div style="margin-top:12px">' + (g.saved > 0 ? '<button class="btn" data-act="gTake">Take money out</button>' : '') + '<button class="btn" data-act="goalEdit">Edit goal</button></div>';
+    sheet(h, 'goal');
+    setTimeout(function () { var lv = document.querySelector('#jarwrap .lvl'); if (lv) lv.style.transform = 'translateY(' + lv.getAttribute('data-y') + 'px)'; }, 60);
+  }
+  function goalEditSheet(g, isNew) {
+    ui.gEdit = { g: g, isNew: isNew, emoji: g.emoji, color: g.color, kind: g.kind || 'goal' };
+    var h = '<div class="hd"><b>' + (isNew ? 'New goal or wish' : 'Edit goal') + '</b><button class="x" data-act="close">✕</button></div>' +
+      '<div class="seg2" id="gKind">' + [['goal', '🎯 Savings goal'], ['wish', '🛍️ Wishlist item']].map(function (k) { return '<button data-act="gKind" data-v="' + k[0] + '" class="' + (ui.gEdit.kind === k[0] ? 'on' : '') + '">' + k[1] + '</button>'; }).join('') + '</div>' +
+      '<div class="catprev"><span id="gPrev" style="background:' + g.color + '">' + g.emoji + '</span></div>' +
+      '<label class="f">What is it?</label><input type="text" id="gName" maxlength="30" value="' + esc(g.name) + '" placeholder="e.g. Royal Enfield, Umrah, new phone">' +
+      '<label class="f">How much does it cost?</label><input type="number" id="gTarget" inputmode="numeric" value="' + (g.target || '') + '" placeholder="₹">' +
+      (isNew ? '<label class="f">Already saved (optional)</label><input type="number" id="gStart" inputmode="numeric" placeholder="₹0">' : '') +
+      '<label class="f">By when? (optional)</label><input type="month" id="gDue" value="' + (g.due || '') + '">' +
+      '<label class="f">Icon</label><div class="emo" id="gEmo">' + GEMO.map(function (e) { return '<button data-act="gEmo" data-v="' + e + '"' + (e === g.emoji ? ' class="on"' : '') + '>' + e + '</button>'; }).join('') + '</div>' +
+      '<label class="f">Colour</label><div class="swatch" id="gCol">' + SW.map(function (x) { return '<button data-act="gCol" data-v="' + x + '" style="background:' + x + '"' + (x === g.color ? ' class="on"' : '') + ' aria-label="Colour"></button>'; }).join('') + '</div>' +
+      '<div style="margin-top:16px"><button class="btn pri" data-act="goalSave">' + (isNew ? 'Start saving' : 'Save') + '</button>' + (isNew ? '' : '<button class="btn danger" data-act="goalDel">Delete this goal</button>') + '</div>';
+    sheet(h, 'goalEdit');
+  }
+  function trulyFree() { var bt = balTotals(); if (!bt.set) return 0; return bt.have - bt.owe - fxState().reserve - iouTotals().owe - goalsSaved(); }
+  function goalDeposit(g, amt, src) {
+    var before = gPct(g); amt = Math.round(amt);
+    if (amt < 0) amt = -Math.min(-amt, g.saved);
+    if (!amt) return;
+    g.saved = Math.max(g.saved + amt, 0); var le = { ts: Date.now(), amt: amt }; if (src) le.src = src; (g.log = g.log || []).push(le); save();
+    var after = gPct(g), wrap = document.getElementById('jarwrap');
+    if (wrap && amt > 0 && !calm()) { var coin = document.createElement('i'); coin.className = 'coin'; coin.textContent = '₹'; wrap.appendChild(coin); setTimeout(function () { coin.remove(); }, 900); }
+    setTimeout(function () {
+      var lv = wrap && wrap.querySelector('.lvl'); if (lv) lv.style.transform = 'translateY(' + (30 + (1 - after) * 112).toFixed(1) + 'px)';
+      var sv = document.getElementById('gSaved'); if (sv) tween(sv, g.saved);
+      var bar = document.getElementById('gBar'); if (bar) bar.style.width = (after * 100).toFixed(1) + '%';
+      var pc = document.getElementById('gPct'); if (pc) pc.textContent = Math.round(after * 100) + '%';
+      var pl = document.getElementById('gPlan'); if (pl) pl.textContent = gPlan(g);
+    }, amt > 0 && !calm() ? 420 : 0);
+    var hit = [.25, .5, .75, 1].filter(function (m) { return before < m && after >= m; }).pop();
+    if (hit) setTimeout(function () { confetti(hit === 1 ? 160 : 70); toast(hit === 1 ? g.emoji + ' ' + g.name + ' reached! 🎉' : Math.round(hit * 100) + '% of the way to ' + g.name + ' ✨'); if (hit === 1) goalSheet(g); }, 900);
+    else { hap(amt > 0 ? 1 : 0); toast(amt > 0 ? '+' + inr(amt) + ' to ' + g.name : inr(-amt) + ' taken out'); }
   }
 
   // ---------- layers ----------
@@ -1042,7 +1165,30 @@
     dock: function () { ui.dock = !ui.dock; hap(0); nav(); },
     dkSort: function () { ui.dock = false; nav(); if (toSort().length) ACT.sort(); else toast('Nothing to sort 🎉'); },
     dkCats: function () { ui.dock = false; nav(); catsLayer(); }, dkArch: function () { ui.dock = false; nav(); archiveLayer(); }, dkFixed: function () { ui.dock = false; nav(); fixedLayer(); },
-    goCats: function () { closeSheet(); catsLayer(); }, goArch: function () { closeSheet(); archiveLayer(); },
+    goCats: function () { closeSheet(); catsLayer(); },
+    goGoals: function () { closeSheet(); goalsLayer(); }, dkGoals: function () { ui.dock = false; nav(); goalsLayer(); },
+    goalOpen: function (id) { var g = goals().filter(function (x) { return x.id === id; })[0]; if (g) goalSheet(g); },
+    goalNew: function () { goalEditSheet({ id: '', name: '', emoji: '🎯', color: SW[(goals().length * 3 + 10) % SW.length], target: 0, saved: 0, due: '', kind: 'goal', log: [] }, true); setTimeout(function () { var e = document.getElementById('gName'); if (e) e.focus(); }, 250); },
+    goalEdit: function () { goalEditSheet(ui.goal, false); },
+    gKind: function (k) { ui.gEdit.kind = k; var b = document.querySelectorAll('#gKind button'); for (var i = 0; i < b.length; i++) b[i].className = b[i].getAttribute('data-v') === k ? 'on' : ''; if (k === 'wish' && ui.gEdit.emoji === '🎯') ACT.gEmo('🛍️'); },
+    gEmo: function (e) { ui.gEdit.emoji = e; document.getElementById('gPrev').textContent = e; var b = document.querySelectorAll('#gEmo button'); for (var i = 0; i < b.length; i++) b[i].className = b[i].getAttribute('data-v') === e ? 'on' : ''; hap(0); },
+    gCol: function (x) { ui.gEdit.color = x; document.getElementById('gPrev').style.background = x; var b = document.querySelectorAll('#gCol button'); for (var i = 0; i < b.length; i++) b[i].className = b[i].getAttribute('data-v') === x ? 'on' : ''; hap(0); },
+    goalSave: function () {
+      var e = ui.gEdit, g = e.g, nm = clean(val('gName')).slice(0, 30), t = parseFloat(val('gTarget')), st = parseFloat(val('gStart')) || 0;
+      if (!nm) { toast('Give it a name'); return; } if (!(t > 0)) { toast('How much does it cost?'); return; }
+      g.name = nm; g.target = Math.round(t); g.emoji = e.emoji; g.color = e.color; g.kind = e.kind; g.due = /^\d{4}-\d{2}$/.test(val('gDue')) ? val('gDue') : '';
+      if (e.isNew) { g.id = 'g' + Date.now().toString(36); g.created = Date.now(); g.saved = 0; g.log = []; if (st > 0) { g.saved = Math.round(st); g.log.push({ ts: Date.now(), amt: g.saved, start: 1 }); } goals().push(g); }
+      save(); confetti(e.isNew ? 60 : 0); goalSheet(g); if (ui.layer === 'goals') goalsLayer(); else renderA();
+    },
+    goalDel: function () {
+      if (!ui.gArm) { ui.gArm = true; toast('Tap Delete again to confirm'); setTimeout(function () { ui.gArm = false; }, 4000); return; }
+      ui.gArm = false; state.goals.splice(state.goals.indexOf(ui.gEdit.g), 1); save(); closeSheet(); hap(2); toast('Goal deleted'); if (ui.layer === 'goals') goalsLayer(); else renderA();
+    },
+    gAdd: function (v) { goalDeposit(ui.goal, +v); if (ui.layer === 'goals') setTimeout(function () { var st = document.getElementById('full').scrollTop; goalsLayer(); document.getElementById('full').scrollTop = st; }, 1200); else setTimeout(renderA, 1200); },
+    gAddAmt: function () { var v = parseFloat(val('gAmt')); if (!(v > 0)) { toast('Type an amount'); return; } document.getElementById('gAmt').value = ''; ACT.gAdd(v); },
+    gTake: function () { var v = parseFloat(val('gAmt')); if (!(v > 0)) { toast('Type the amount to take out above'); var e = document.getElementById('gAmt'); if (e) e.focus(); else sheet('<div class="hd"><b>Take money out</b><button class="x" data-act="close">✕</button></div><input type="number" id="gAmt" inputmode="numeric" placeholder="Amount"><button class="btn danger" style="margin-top:12px" data-act="gTake">Take out</button>', 'goalTake'); return; } goalDeposit(ui.goal, -v); setTimeout(function () { goalSheet(ui.goal); if (ui.layer === 'goals') goalsLayer(); else renderA(); }, 500); },
+    stash: function (v) { var a = v.split('|'), g = goals().filter(function (x) { return x.id === a[0]; })[0]; if (!g) return; state.stashDay = iso(Date.now()); goalSheet(g); setTimeout(function () { goalDeposit(g, +a[1], 'stash'); setTimeout(renderA, 1300); }, 350); },
+    stashNo: function () { state.stashDay = iso(Date.now()); save(); renderA(); }, goArch: function () { closeSheet(); archiveLayer(); },
     viz: function (k) { if (ui.tab !== 'month') { ui.viz = k; ACT.tab('month'); return; } ui.viz = k; hap(0); keep(); var vb = document.querySelector('.vbody'); if (vb) animIn(vb); },
     fan: function () { ui.fan = !ui.fan; hap(0); var w = document.querySelector('.wallet'); if (w) { w.classList.toggle('fan', ui.fan); var fb = w.querySelector('.fanb'); if (fb) fb.textContent = ui.fan ? 'Tuck in' : 'Peek'; } },
     autoCsv: function () { state.autoCsv = state.autoCsv === false; save(); settingsSheet(); },

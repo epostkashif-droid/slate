@@ -90,6 +90,7 @@
   }
 
   // ---------- balances: you type the figure once, Slate keeps it moving ----------
+  var PARSER_V = 2;    // bump when the parser changes how messages are read
   function alias(n) { return (state.alias && state.alias[n]) || n; }
   function ensureAccts() {
     if (!state.accts.Cash) state.accts.Cash = { type: 'cash', base: null };
@@ -99,9 +100,11 @@
   function mutedDigits() { return Object.keys(state.acctOff || {}).filter(function (k) { return state.acctOff[k].mode === 'gone'; }).map(function (k) { var m = /(\d{3,6})$/.exec(k); return m ? m[1] : ''; }).filter(Boolean); }
   function balOf(name) {
     var a = state.accts[name]; if (!a || !a.base) return null;
-    var v = a.base.v, n = 0, card = a.type === 'card';
+    var v = a.base.v, n = 0, card = a.type === 'card', from = a.base.ts;
+    // Banks print the real balance ("Avl Bal") in most SMS. The newest one after your figure wins, so a missed or doubled message can't make the tally drift.
+    if (a.type === 'bank') state.txns.forEach(function (t) { if (t.acct === name && t.bal != null && t.ts > from) { from = t.ts; v = t.bal; } });
     state.txns.forEach(function (t) {
-      if (t.ts <= a.base.ts) return;
+      if (t.ts <= from) return;
       if (t.acct === name) { v += (card ? t.dir === 'out' : t.dir === 'in') ? t.amt : -t.amt; n++; }
       else if (a.type === 'cash' && t.b === 'cash' && t.dir === 'out') { v += t.amt; n++; }      // cash taken out of a bank account lands in your wallet
     });
@@ -189,8 +192,9 @@
     list.forEach(function (m) {
       if (m.d >= until) return;
       var id = 's' + m.id; if (m.d > max) max = m.d;
-      if (state.deleted[id] || (have[id] && (have[id].edited || !full))) return;
+      if (state.deleted[id] || (have[id] && !full)) return;
       var r = P.parseSms(m, {});
+      if (have[id] && have[id].edited) { if (r.kind === 'txn') { have[id].acct = alias(acctName(r.txn)); if (r.txn.balance != null && r.txn.acctType !== 'credit_card') have[id].bal = r.txn.balance; else delete have[id].bal; } return; }   // keep your edits, but take the corrected account
       if (r.kind !== 'txn') { if (have[id] && full) { state.txns.splice(state.txns.indexOf(have[id]), 1); } return; }
       var x = r.txn, t = { id: id, ts: x.ts, amt: x.amount, dir: x.dir === 'debit' ? 'out' : 'in', who: x.merchant, acct: alias(acctName(x)), raw: x.raw, edited: false, note: '' };
       var off = state.acctOff && state.acctOff[t.acct];
@@ -1384,6 +1388,6 @@
   load(); rollover(); applyLook();
   ui.perm = A.hasSmsPermission();
   render();
-  if (state.onboarded && ui.perm) scan(false);
+  if (state.onboarded && ui.perm) { if (state.pv !== PARSER_V) { state.pv = PARSER_V; scan(true); } else scan(false); }   // a parser fix re-reads this month's messages once
   if (ui.showWrap && state.wrap) { ui.showWrap = false; showWrap(state.wrap, false); }
 })();

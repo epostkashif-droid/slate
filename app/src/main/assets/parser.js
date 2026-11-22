@@ -102,9 +102,13 @@
 
   function accountInfo(body) {
     var isDebitCard = /debit card/i.test(body);
-    var cardM = /(?:credit\s+card|bank\s+card|card)(?:\s*(?:no\.?|number|ending(?:\s+(?:with|in))?))?[\s:.#-]*(?:[xX*]+|\.{2,})?\s*-?(\d{4})\b/i.exec(body);
+    // "Card XX1234", "Card ending 1234", "Credit Card Account 4xxx1234"
+    var cardM = /(?:credit\s+card|bank\s+card|card)(?:\s+a\/?c(?:count)?)?(?:\s*(?:no\.?|number|ending(?:\s+(?:with|in))?))?[\s:.#-]*(?:\d{0,6}[xX*]+|\.{2,})?\s*-?(\d{4})\b/i.exec(body);
     var acctM = /(?:a\/c|acct?\.?|account)(?:\s*(?:no\.?|number|ending(?:\s+(?:with|in))?))?[\s:.#-]*(?:[xX*]+|\.{2,})?\s*-?(\d{3,6})\b/i.exec(body);
-    var looksCard = /credit card|avl\.? ?(limit|lmt)|available (credit )?limit|bank card|card no/i.test(body) || (!!cardM && !acctM);
+    // A bank account debited to pay a card bill ("Acct XX687 debited ...; Credit Card XX1234 credited") belongs to the bank account
+    var cardAt = body.search(/credit\s+card|bank\s+card|\bcard\b/i);
+    var acctFirst = !!acctM && (cardAt < 0 || acctM.index < cardAt) && !/avl\.? ?(limit|lmt)|available (credit )?limit|spent (on|using|via)/i.test(body);
+    var looksCard = !acctFirst && (/credit card|avl\.? ?(limit|lmt)|available (credit )?limit|bank card|card no/i.test(body) || (!!cardM && !acctM));
     if (looksCard && !isDebitCard) return { type: 'credit_card', last4: cardM ? cardM[1] : '' };
     if (acctM) return { type: 'savings', last4: acctM[1] };
     if (isDebitCard) return { type: 'savings', last4: cardM ? cardM[1] : '' };

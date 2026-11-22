@@ -2,6 +2,10 @@
 (function (root) {
   var S = [
     // ---- ICICI ----
+    { a: 'AX-ICICIB-S', b: 'ICICI Bank Acct XX123 debited for Rs 25,000.00 on 20-Nov-26; ICICI Bank Credit Card XX4005 credited. UPI:431234567891. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766.',
+      x: { kind: 'txn', dir: 'debit', amount: 25000, acctType: 'savings', last4: '123' } },
+    { a: 'VM-ICICIB', b: 'Dear Customer, Payment of INR 25,000.00 has been received on your ICICI Bank Credit Card Account 4xxx4005 on 20-Nov-26. Thank you.',
+      x: { kind: 'txn', dir: 'credit', amount: 25000, acctType: 'credit_card', last4: '4005' } },
     { a: 'AX-ICICIB-S', b: 'ICICI Bank Acct XX123 debited for Rs 250.00 on 12-Nov-26; ZOMATO credited. UPI:431234567890. Call 18002662 for dispute. SMS BLOCK 123 to 9215676766.',
       x: { kind: 'txn', dir: 'debit', amount: 250, acctType: 'savings', last4: '123', bank: 'ICICI', merchant: 'Zomato', category: 'Food & Dining', mode: 'UPI' } },
     { a: 'VM-ICICIB', b: 'Dear Customer, Acct XX123 is credited with Rs 5000.00 on 12-Nov-26 from RAHUL KUMAR. UPI:123456789012-ICICI Bank.',

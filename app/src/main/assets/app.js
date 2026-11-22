@@ -501,19 +501,23 @@
       (pct > .04 ? '<circle class="bb b1" cx="30" cy="70" r="3"/><circle class="bb b2" cx="62" cy="80" r="2.2"/><circle class="bb b3" cx="80" cy="64" r="2.8"/>' : '') +
       '</g></g><path class="shine" d="M24 30 Q 20 60 24 96"/></svg>';
   }
+  function pctLabel(f) { var p = Math.round((f || 0) * 100); return p > 999 ? '999+' : p + '%'; }   // keeps the label inside its 34px slot
   function dayFrac() { var n = new Date(); return (n.getHours() * 60 + n.getMinutes()) / 1440; }
   function pace(c) {
-    var fx = c.fx, varBudget = Math.max(state.budget - fx.total, 1), varSpent = Math.max(c.spentMonth - fx.paid, 0), elapsed = Math.max(c.day - 1 + dayFrac(), .25);
-    var timePct = Math.min(elapsed / c.dim, 1), usedPct = varSpent / varBudget, proj = varSpent / elapsed * c.dim + fx.total;
-    return { timePct: timePct, usedPct: usedPct, gap: timePct * varBudget - varSpent, proj: proj };
+    // Pace is measured on everyday spending (limit minus fixed payments). If fixed payments eat the whole
+    // limit there is nothing left to pace against, so fall back to all spending vs the full limit.
+    var fx = c.fx, squeezed = fx.total >= state.budget, elapsed = Math.max(c.day - 1 + dayFrac(), .25);
+    var varBudget = squeezed ? state.budget : state.budget - fx.total, varSpent = squeezed ? c.spentMonth : Math.max(c.spentMonth - fx.paid, 0);
+    var timePct = Math.min(elapsed / c.dim, 1), usedPct = varBudget > 0 ? varSpent / varBudget : 0, proj = squeezed ? c.spentMonth / elapsed * c.dim : varSpent / elapsed * c.dim + fx.total;
+    return { timePct: timePct, usedPct: usedPct, gap: timePct * varBudget - varSpent, proj: proj, squeezed: squeezed, fxTotal: fx.total };
   }
   function glance(c) {
     if (!(state.budget > 0)) return '<button class="card glance" data-act="budget">' + tankSvg(.62, 'plain') + '<span class="gi"><b>See your month as a tank</b><span class="mute small">Set a monthly limit and watch what is left drain as you spend. Amber when you are running fast, red when you go over.</span><span class="chip">Set a limit ›</span></span></button>';
     var left = Math.max(c.leftMonth, 0), pc2 = pace(c), ahead = pc2.gap < 0;
     return '<div class="card glance" data-act="viz" data-v="pace">' + tankSvg(left / state.budget, c.mood) + '<div class="gi"><span class="mute small" style="font-weight:700">LEFT THIS MONTH</span><b class="num gbig" data-count="' + left + '">' + inr(left) + '</b><span class="mute small">of ' + inr(state.budget) + '</span>' +
       '<div class="pbar"><span>Month gone</span><div><i style="width:' + (pc2.timePct * 100).toFixed(0) + '%"></i></div><b class="num">' + Math.round(pc2.timePct * 100) + '%</b></div>' +
-      '<div class="pbar ' + (ahead ? 'hot' : '') + '"><span>Spending used</span><div><i style="width:' + Math.min(pc2.usedPct * 100, 100).toFixed(0) + '%"></i></div><b class="num">' + Math.round(pc2.usedPct * 100) + '%</b></div>' +
-      '<span class="verdict ' + (ahead ? 'hot' : 'ok') + '">' + (ahead ? '🏃 ' + inr(-pc2.gap) + ' ahead of pace' : '🐢 ' + inr(pc2.gap) + ' under pace') + '</span></div></div>';
+      '<div class="pbar ' + (ahead ? 'hot' : '') + '"><span>Spending used</span><div><i style="width:' + Math.min(pc2.usedPct * 100, 100).toFixed(0) + '%"></i></div><b class="num">' + pctLabel(pc2.usedPct) + '</b></div>' +
+      (pc2.squeezed ? '<span class="verdict hot">⚠️ Fixed payments ' + inr(pc2.fxTotal) + ' exceed your limit</span>' : '<span class="verdict ' + (ahead ? 'hot' : 'ok') + '">' + (ahead ? '🏃 ' + inr(-pc2.gap) + ' ahead of pace' : '🐢 ' + inr(pc2.gap) + ' under pace') + '</span>') + '</div></div>';
   }
   function paceSvg(c) {
     var W = 320, H = 130, L = 6, R = 6, T = 10, Bm = 20, dimN = c.dim, cum = [], run = 0, i, max = state.budget || 0, p2 = state.budget > 0 ? pace(c) : null;

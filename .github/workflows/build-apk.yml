@@ -1,6 +1,6 @@
-name: Build test APK
+name: Build Slate Unslop test APK
 
-# Builds a sideload Slate.apk with Google's official Android SDK on GitHub's runners.
+# Builds a sideload SlateUnslop.apk with Google's official Android SDK on GitHub's runners.
 # TEST build for your own phone; the Play upload still uses build-play.sh and your upload key.
 #
 # Signing key, most durable first:
@@ -9,7 +9,7 @@ name: Build test APK
 # The key is never committed. An encrypted copy is published to the builds branch so it can be handed to you.
 on:
   push:
-    branches: ['main']
+    branches: ['unslop']
     paths-ignore: ['README.md', 'docs/**', 'marketing/**']
   workflow_dispatch:
   schedule:
@@ -19,7 +19,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-apk
+  group: build-apk-unslop
   cancel-in-progress: false
 
 env:
@@ -96,33 +96,33 @@ jobs:
           V=$((200 + GITHUB_RUN_NUMBER)); B=/tmp/b; rm -rf $B; mkdir -p $B/classes $B/dex
           javac -nowarn -source 8 -target 8 -bootclasspath "$AJ" -d $B/classes app/src/main/java/com/kaybuilds/slate/*.java
           "$BT/d8" --min-api 26 --lib "$AJ" --output $B/dex $(find $B/classes -name '*.class')
-          sed "s#<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">#<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"com.kaybuilds.slate\" android:versionCode=\"$V\" android:versionName=\"2.0.$V\"><uses-sdk android:minSdkVersion=\"29\" android:targetSdkVersion=\"36\" />#" app/src/main/AndroidManifest.xml > $B/AndroidManifest.xml
+          sed "s#<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">#<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"com.kaybuilds.slate.unslop\" android:versionCode=\"$V\" android:versionName=\"2.0.$V\"><uses-sdk android:minSdkVersion=\"29\" android:targetSdkVersion=\"36\" />#" app/src/main/AndroidManifest.xml > $B/AndroidManifest.xml
           "$BT/aapt2" compile --dir app/src/main/res -o $B/res.zip
           "$BT/aapt2" link -o $B/unsigned.apk -I "$AJ" --manifest $B/AndroidManifest.xml -A app/src/main/assets --min-sdk-version 29 --target-sdk-version 36 $B/res.zip
           (cd $B/dex && zip -q ../unsigned.apk classes.dex)
           "$BT/zipalign" -f -p 4 $B/unsigned.apk $B/aligned.apk
           ALIAS=$(keytool -list -keystore "$KS" -storepass "$KS_PASS" | awk -F, '/PrivateKeyEntry/{print $1; exit}')
-          "$BT/apksigner" sign --ks "$KS" --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" --ks-key-alias "$ALIAS" --out Slate.apk $B/aligned.apk
-          "$BT/apksigner" verify --print-certs Slate.apk
-          "$BT/aapt2" dump badging Slate.apk | head -2
+          "$BT/apksigner" sign --ks "$KS" --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" --ks-key-alias "$ALIAS" --out SlateUnslop.apk $B/aligned.apk
+          "$BT/apksigner" verify --print-certs SlateUnslop.apk
+          "$BT/aapt2" dump badging SlateUnslop.apk | head -2
           echo "V=$V" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Slate-apk
-          path: Slate.apk
+          name: SlateUnslop-apk
+          path: SlateUnslop.apk
 
       - name: Publish to the builds branch (APK, version, encrypted key copy)
         run: |
           set -e
-          P=/tmp/pub; rm -rf $P; mkdir -p $P; cp Slate.apk $P/Slate.apk; echo "$V" > $P/VERSION
-          "$BT/apksigner" verify --print-certs Slate.apk | grep -i "SHA-256" | head -1 > $P/SIGNER.txt
+          P=/tmp/pub; rm -rf $P; mkdir -p $P; cp SlateUnslop.apk $P/SlateUnslop.apk; echo "$V" > $P/VERSION
+          "$BT/apksigner" verify --print-certs SlateUnslop.apk | grep -i "SHA-256" | head -1 > $P/SIGNER.txt
           openssl cms -encrypt -binary -aes256 -outform DER -in "$KS" -out $P/signing-key.enc ci/key-export-cert.pem
           cd $P
-          git init -q -b builds
+          git init -q -b builds-unslop
           git -c user.name="slate-ci" -c user.email="ci@users.noreply.github.com" add -A
           git -c user.name="slate-ci" -c user.email="ci@users.noreply.github.com" commit -qm "Test build $V"
-          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" builds
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" builds-unslop
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -131,6 +131,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete test-101 --yes --cleanup-tag -R "$GITHUB_REPOSITORY" 2>/dev/null || true   # signed with a key that was lost
-          gh release create "test-$V" Slate.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
-            --title "Slate test build $V" --notes "Sideload test build. Not the Play Store build."
+                    gh release create "unslop-$V" SlateUnslop.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Slate Unslop test $V" --notes "Redesign trial. Installs next to Slate with its own data."

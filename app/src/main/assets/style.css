@@ -663,3 +663,18 @@ html.dk .dd.on i { background: var(--accent); }
 .pick { overflow-wrap: normal; word-break: normal; padding: 12px 2px 8px; }
 .pick span svg { display: none; }
 .pick.new span { width: auto; height: 10px; border: 0; background: none; font-size: 16px; line-height: 10px; color: var(--ink2); }
+
+/* ---------- fun, kept to the moments: boards, the chalk line drawing in, chalk dust, the wipe ---------- */
+.brds { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 8px; }
+.brd { border: 0; background: none; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 12px; font-weight: 500; color: var(--ink2); text-align: center; }
+.brd i { display: flex; align-items: center; justify-content: center; aspect-ratio: 4 / 3; border-radius: 10px; color: var(--chalk); box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+.brd i svg.chalk { width: 60%; margin: 0; color: var(--chalk); }
+.brd.on { color: var(--ink); } .brd.on i { outline: 2px solid var(--ink); outline-offset: 2px; }
+svg.chalk path { stroke-dasharray: 1; stroke-dashoffset: 0; }
+#view.anim svg.chalk path, #full svg.chalk path { animation: chalkdraw .7s var(--ease) both .2s; }
+#view.anim svg.chalk path.c2, #full svg.chalk path.c2 { animation-delay: .32s; }
+@keyframes chalkdraw { from { stroke-dashoffset: 1; } }
+.sortcard.fly { animation: fly3 .26s var(--ease) forwards; }
+@keyframes fly3 { 35% { background: color-mix(in srgb, var(--fc) 20%, var(--surface)); border-color: var(--fc); transform: none; } to { background: color-mix(in srgb, var(--fc) 20%, var(--surface)); border-color: var(--fc); transform: translateX(32px); opacity: 0; } }
+.wrap.wipe::after { display: block; content: ''; position: absolute; top: -10%; bottom: -10%; left: 0; width: 60%; right: auto; border-radius: 0; background: linear-gradient(90deg, transparent, rgba(243,241,234,.16) 35%, rgba(243,241,234,.16) 65%, transparent); transform: translateX(-120%) skewX(-12deg); animation: wipe 1.1s var(--ease) .25s both; pointer-events: none; }
+@keyframes wipe { to { transform: translateX(260%) skewX(-12deg); } }

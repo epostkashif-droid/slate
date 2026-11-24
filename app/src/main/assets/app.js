@@ -267,7 +267,7 @@
       row('go', 'month', '📊', mname(state.month), 'Where it went, day by day') + '</div><div class="card" style="padding:4px 16px">' +
       (n ? row('goSort', '', '❓', 'Sort spends', n + ' waiting') : '') + row('goFixed', '', '📌', 'Fixed payments', state.fixed.length ? fx.nPaid + ' of ' + state.fixed.length + ' paid' : 'EMIs, rent, fees') +
       row('goIou', '', '🤝', 'Lent & borrowed', io.n ? io.n + ' open' : 'Track who owes whom') + row('goGoals', '', '🎯', 'Goals & wishlist', goals().length ? inr(goalsSaved()) + ' saved' : 'Save for what you want') + row('goCats', '', '🏷️', 'Categories', state.cats.length + ' · add your own') +
-      row('goArch', '', '🗂️', 'Archive', state.archive.length ? state.archive.length + ' month' + (state.archive.length === 1 ? '' : 's') + ' kept' : 'Past months live here') + row('dkTheme', '', '🌓', 'Light & dark', ({ system: 'Auto', light: 'Light', dark: 'Dark' })[state.mode || 'system']) + row('goSettings', '', '⚙️', 'Settings', 'Limit, notifications, export') + '</div>', 'menu');
+      row('goArch', '', '🗂️', 'Archive', state.archive.length ? state.archive.length + ' month' + (state.archive.length === 1 ? '' : 's') + ' kept' : 'Past months live here') + row('dkTheme', '', '🎨', 'Theme', ((OLDTHEME[state.theme] || state.theme) === 'monthly' ? 'Every month' : BOARDS[boardKey()][0]) + ' · ' + ({ system: 'Auto', light: 'Light', dark: 'Dark' })[state.mode || 'system']) + row('goSettings', '', '⚙️', 'Settings', 'Limit, notifications, export') + '</div>', 'menu');
   }
   function pc(t) {       // a spend as a card
     var q = t.b === '?';
@@ -351,7 +351,7 @@
       '<div class="meta ell">' + (q ? 'Tap to sort' : esc(bk(t.b)[1])) + ' · ' + (ro ? new Date(t.ts).getDate() + ' ' + MON[new Date(t.ts).getMonth()].slice(0, 3) + ' · ' : '') + time(t.ts) + (t.acct ? ' · ' + esc(t.acct) : '') + '</div></div><div class="amt num' + (t.dir === 'in' ? ' in' : '') + '">' + (t.dir === 'in' ? '+' : '') + inr(t.amt) + '</div></div>';
   }
   function chalkLine() {      // a hand-ruled chalk stroke, Slate's one signature detail
-    return '<svg class="chalk" viewBox="0 0 200 8" preserveAspectRatio="none" aria-hidden="true"><path d="M2 5.2 C 30 3.6, 58 6.1, 92 4.4 S 158 3.5, 198 4.9"/><path class="c2" d="M6 5.9 C 44 4.6, 80 6.3, 120 4.9 S 172 4.6, 194 5.6"/></svg>';
+    return '<svg class="chalk" viewBox="0 0 200 8" preserveAspectRatio="none" aria-hidden="true"><path pathLength="1" d="M2 5.2 C 30 3.6, 58 6.1, 92 4.4 S 158 3.5, 198 4.9"/><path pathLength="1" class="c2" d="M6 5.9 C 44 4.6, 80 6.3, 120 4.9 S 172 4.6, 194 5.6"/></svg>';
   }
   function hero(c) {
     if (look() === 'paper') return heroRing(c);
@@ -457,9 +457,9 @@
   function calm() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
   function hap(k) { try { A.haptic(k || 0); } catch (e) { } }
   function confetti(n) {
-    hap(1); return;
+    hap(1); if (calm() || state.party === false) return; n = Math.min(n || 60, 70);
     var cv = document.createElement('canvas'), g = cv.getContext('2d'), dpr = Math.min(window.devicePixelRatio || 1, 2), W = innerWidth, H = innerHeight, parts = [], i;
-    var acc = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#0b8a5f', cols = [acc, '#f59e0b', '#ec4899', '#3b82f6', '#22c55e', '#a855f7', '#f43f5e'];
+    var acc = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#0b8a5f', cols = ['#f3f1ea', '#f3f1ea', '#7fd6ad', '#e9b862', '#f2948a', '#9cc3e6', acc];
     cv.width = W * dpr; cv.height = H * dpr; cv.className = 'confetti'; document.body.appendChild(cv); g.scale(dpr, dpr);
     for (i = 0; i < (n || 90); i++) parts.push({ x: W / 2 + (Math.random() - .5) * 60, y: H * .42, vx: (Math.random() - .5) * 15, vy: -Math.random() * 15 - 5, w: Math.random() * 7 + 5, h: Math.random() * 4 + 3, a: Math.random() * 6, va: (Math.random() - .5) * .35, c: cols[i % cols.length], round: Math.random() < .3 });
     var t0 = performance.now();
@@ -484,6 +484,23 @@
 
   // ---------- colour themes and light / dark ----------
   // name, accent (light), accent (dark), hero from, hero to, glow from, glow to
+  // name, board (light mode), board (dark mode), accent (light), accent (dark)
+  var BOARDS = {
+    slate: ['Slate', '#23292b', '#20262a', '#0b7a55', '#3bbf8c'],
+    chalkboard: ['Chalkboard', '#22392f', '#1d3229', '#0b7a55', '#46c48f'],
+    ink: ['Ink', '#1d2a45', '#1a253d', '#2c5fc4', '#7ea6f0'],
+    teal: ['Lagoon', '#173d40', '#153638', '#0d7a80', '#4cc4c8'],
+    terracotta: ['Terracotta', '#6e3424', '#5a2c20', '#b0502b', '#ec8a5f'],
+    plum: ['Plum', '#3a2442', '#33203a', '#86418f', '#c48ad0'],
+    rose: ['Rose', '#4a2232', '#3f1d2b', '#b3325e', '#ee7fa3']
+  };
+  var BORDER = ['slate', 'chalkboard', 'ink', 'teal', 'terracotta', 'plum', 'rose'];
+  var OLDTHEME = { emerald: 'chalkboard', ocean: 'ink', grape: 'plum', teal: 'teal', sunset: 'terracotta', rose: 'rose', graphite: 'slate', aurora: 'monthly' };
+  function boardKey() {
+    var k = OLDTHEME[state.theme] || state.theme;
+    if (k === 'monthly') return BORDER[(+state.month.split('-')[1] - 1) % BORDER.length];
+    return BOARDS[k] ? k : 'slate';
+  }
   var THEMES = {
     emerald: ['Emerald', '#0b7a55', '#3bbf8c', '#0d9668', '#075f52', '#7c5cff', '#22c7e6'],
     ocean: ['Ocean', '#1f6fd1', '#5aa2ff', '#2f7be5', '#123f8c', '#3b82f6', '#22d3ee'],
@@ -497,20 +514,26 @@
   function rgba(hex, a) { var n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')'; }
   function isDark() { var k = look(); if (k === 'glow') return true; if (state.mode === 'dark') return true; if (state.mode === 'light') return false; return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }
   function applyTheme() {
-    var k = look(), th = THEMES.emerald, dark = isDark(), s = document.body.style;
+    var k = look(), bd = BOARDS[boardKey()], dark = isDark(), s = document.body.style;
     document.documentElement.classList.toggle('dk', dark);
     document.body.classList.remove('aurora');
     document.body.classList.toggle('calm', calm());
-    ['--accent', '--accent-soft', '--g1', '--g2', '--x1', '--x2'].forEach(function (p) { s.removeProperty(p); });
-    if (k === 'classic' || k === 'sway') { var a = dark ? th[2] : th[1]; s.setProperty('--accent', a); s.setProperty('--accent-soft', rgba(a, dark ? .14 : .1)); }
+    ['--accent', '--accent-soft', '--slate', '--g1', '--g2', '--x1', '--x2'].forEach(function (p) { s.removeProperty(p); });
+    if (true) { var a = dark ? bd[4] : bd[3]; s.setProperty('--accent', a); s.setProperty('--accent-soft', rgba(a, dark ? .14 : .1)); s.setProperty('--slate', dark ? bd[2] : bd[1]); }
     else if (k === 'glow') { s.setProperty('--x1', th[5]); s.setProperty('--x2', th[6]); s.setProperty('--accent', th[5]); s.setProperty('--accent-soft', rgba(th[5], .2)); }
   }
   if (window.matchMedia) try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { applyLook(); render(); }); } catch (e) { }
   function themeSheet() {
-    sheet('<div class="hd"><b>Light & dark</b><button class="x" data-act="close">✕</button></div>' +
-      '<div class="seg2">' + [['system', 'Auto'], ['light', 'Light'], ['dark', 'Dark']].map(function (m) { return '<button data-act="setMode" data-v="' + m[0] + '" class="' + ((state.mode || 'system') === m[0] ? 'on' : '') + '">' + m[1] + '</button>'; }).join('') + '</div>' +
-      '<p class="mute small" style="margin:8px 2px 0">Auto follows your phone</p>', 'theme');
+    var cur = OLDTHEME[state.theme] || state.theme || 'slate'; if (cur !== 'monthly' && !BOARDS[cur]) cur = 'slate';
+    function sw(k, name, board) { return '<button class="brd' + (cur === k ? ' on' : '') + '" data-act="setTheme" data-v="' + k + '"><i style="background:' + board + '">' + chalkLine() + '</i>' + name + '</button>'; }
+    sheet('<div class="hd"><b>Theme</b><button class="x" data-act="close">✕</button></div>' +
+      '<label class="f" style="margin-top:4px">Board</label><div class="brds">' + BORDER.map(function (k) { return sw(k, BOARDS[k][0], BOARDS[k][1]); }).join('') +
+      sw('monthly', 'Every month', 'conic-gradient(' + BORDER.map(function (k, n) { return BOARDS[k][1] + ' ' + (n * 100 / BORDER.length).toFixed(1) + '% ' + ((n + 1) * 100 / BORDER.length).toFixed(1) + '%'; }).join(',') + ')') + '</div>' +
+      (cur === 'monthly' ? '<p class="mute small" style="margin:8px 2px 0">A new board on the 1st, with your fresh month. This month: ' + BOARDS[boardKey()][0] + '</p>' : '') +
+      '<label class="f">Mode</label><div class="seg2">' + [['system', 'Auto'], ['light', 'Light'], ['dark', 'Dark']].map(function (m) { return '<button data-act="setMode" data-v="' + m[0] + '" class="' + ((state.mode || 'system') === m[0] ? 'on' : '') + '">' + m[1] + '</button>'; }).join('') + '</div>' +
+      '<div class="kv" style="margin-top:8px"><span><b>Celebrations</b><br><span class="mute small">Chalk dust when you finish sorting, settle an IOU or reach a goal</span></span><button class="sw' + (state.party === false ? '' : ' on') + '" data-act="party"></button></div>', 'theme');
   }
+
 
 
   // ---------- live visuals ----------
@@ -726,7 +749,7 @@
   function dockHtml() {
     var n = toSort().length;
     function b(act, ic, label, badge) { return '<button data-act="' + act + '" aria-label="' + label + '"><span>' + ic + '</span><em>' + label + '</em>' + (badge ? '<u>' + badge + '</u>' : '') + '</button>'; }
-    return '<div class="dock' + (ui.dock ? ' open' : '') + '"><div class="dkl">' + b('dkSort', '❓', 'Sort', n) + b('dkGoals', '🎯', 'Goals') + b('dkCats', '🏷️', 'Categories') + b('dkArch', '🗂️', 'Archive') + b('dkTheme', '🌓', 'Light & dark') + b('dkFixed', '📌', 'Fixed') + '</div>' +
+    return '<div class="dock' + (ui.dock ? ' open' : '') + '"><div class="dkl">' + b('dkSort', '❓', 'Sort', n) + b('dkGoals', '🎯', 'Goals') + b('dkCats', '🏷️', 'Categories') + b('dkArch', '🗂️', 'Archive') + b('dkTheme', '🎨', 'Theme') + b('dkFixed', '📌', 'Fixed') + '</div>' +
       '<button class="dkb" data-act="dock" aria-label="Quick menu"><i></i><i></i><i></i></button></div>';
   }
 
@@ -1008,7 +1031,7 @@
     var saved = w.budget > 0 ? w.budget - w.spent : null;
     var line = saved == null ? w.n + ' spends across ' + w.days + ' days' : saved >= 0 ? 'You stayed ' + inr(saved) + ' under your limit' : inr(-saved) + ' over your limit';
     function cell(k, v) { return '<div><div class="k">' + k + '</div><div class="v">' + v + '</div></div>'; }
-    return '<div class="wrap" id="wrapCard"><div class="m">' + mname(w.month) + (live ? ' so far' : ', wrapped') + '</div><div class="t num">' + inr(w.spent) + '</div><div class="line">' + line + '</div><div class="g">' +
+    return '<div class="wrap' + (live ? '' : ' wipe') + '" id="wrapCard"><div class="m">' + mname(w.month) + (live ? ' so far' : ', wrapped') + '</div><div class="t num">' + inr(w.spent) + '</div><div class="line">' + line + '</div><div class="g">' +
       (w.top ? cell('Most went on', bk(w.top)[0] + ' ' + bk(w.top)[1]) : '') + (w.big ? cell('Biggest spend', esc(w.big.who) + ' ' + inr(w.big.amt)) : '') +
       (w.fav ? cell('Regular haunt', esc(w.fav.who) + ' ×' + w.fav.n) : cell('Spends', w.n)) + cell('Per day', inr(w.avg)) + cell('No-spend days', w.zero) + (w.budget > 0 ? cell('Best streak', w.best + ' day' + (w.best === 1 ? '' : 's')) : cell('Money in', inr(w.moneyIn))) +
       '</div><div class="f">Slate · tracked privately on my phone</div></div>';
@@ -1136,7 +1159,7 @@
   function settingsSheet() {
     var ready = false; try { ready = A.notifyReady(); } catch (e) { }
     sheet('<div class="hd"><b>Settings</b><button class="x" data-act="close">✕</button></div><div class="card" style="padding:4px 16px;margin-top:8px">' +
-      '<div class="kv" data-act="dkTheme"><span><b>Light & dark</b><br><span class="mute small">' + ({ system: 'Auto', light: 'Light', dark: 'Dark' })[state.mode || 'system'] + '</span></span><span class="mute">›</span></div>' +
+      '<div class="kv" data-act="dkTheme"><span><b>Theme</b><br><span class="mute small">' + ((OLDTHEME[state.theme] || state.theme) === 'monthly' ? 'Every month' : BOARDS[boardKey()][0]) + ' · ' + ({ system: 'Auto', light: 'Light', dark: 'Dark' })[state.mode || 'system'] + '</span></span><span class="mute">›</span></div>' +
       '<div class="kv" data-act="goCats"><span><b>Categories</b><br><span class="mute small">' + ORDER.length + ' in the picker · add your own</span></span><span class="mute">›</span></div>' +
       '<div class="kv" data-act="budget"><span><b>Monthly limit</b><br><span class="mute small">' + (state.budget ? inr(state.budget) : 'Not set') + '</span></span><span class="mute">›</span></div>' +
       '<div class="kv"><span><b>Tell me after each spend</b><br><span class="mute small">' + (state.notify && !ready ? 'Needs notification and SMS permission. Tap the switch again.' : 'What is left for today, and one tap to sort a spend Slate does not recognise') + '</span></span><button class="sw' + (state.notify ? ' on' : '') + '" data-act="notify" aria-label="Spend notifications"></button></div></div>' +
@@ -1183,6 +1206,7 @@
     looks: lookSheet,
     setLook: function (k) { state.look = k; save(); applyLook(); closeSheet(); renderA(); toast(LOOKS[k][0] + ' it is'); },
     setTheme: function (k) { state.theme = k; save(); applyLook(); themeSheet(); renderA(); hap(0); },
+    party: function () { state.party = state.party === false; save(); themeSheet(); if (state.party) confetti(40); },
     setMode: function (k) { state.mode = k; save(); applyLook(); themeSheet(); renderA(); },
     setMotion: function (k) { state.motion = k; save(); applyLook(); themeSheet(); renderA(); if (k === 'lively') confetti(50); },
     dkTheme: function () { ui.dock = false; nav(); themeSheet(); },
@@ -1202,7 +1226,7 @@
       if (!nm) { toast('Give it a name'); return; } if (!(t > 0)) { toast('How much does it cost?'); return; }
       g.name = nm; g.target = Math.round(t); g.emoji = e.emoji; g.color = e.color; g.kind = e.kind; g.due = /^\d{4}-\d{2}$/.test(val('gDue')) ? val('gDue') : '';
       if (e.isNew) { g.id = 'g' + Date.now().toString(36); g.created = Date.now(); g.saved = 0; g.log = []; if (st > 0) { g.saved = Math.round(st); g.log.push({ ts: Date.now(), amt: g.saved, start: 1 }); } goals().push(g); }
-      save(); confetti(e.isNew ? 60 : 0); goalSheet(g); if (ui.layer === 'goals') goalsLayer(); else renderA();
+      save(); goalSheet(g); if (ui.layer === 'goals') goalsLayer(); else renderA();
     },
     goalDel: function () {
       if (!ui.gArm) { ui.gArm = true; toast('Tap Delete again to confirm'); setTimeout(function () { ui.gArm = false; }, 4000); return; }
@@ -1244,7 +1268,7 @@
       c.n = nm; c.e = own || ui.cat.e || '🏷️'; c.c = ui.cat.col; c.cap = cap > 0 ? cap : 0;
       if (ui.cat.isNew) { c.k = 'u' + Date.now().toString(36); c.custom = true; state.cats.push(c); }
       buildCats(); save(); closeSheet(); toast(ui.cat.isNew ? c.e + ' ' + c.n + ' added' : 'Saved');
-      if (ui.cat.isNew) confetti(40); else hap(1);
+      hap(1);
       ACT.catBack(ui.cat.isNew ? c.k : null);
     },
     catHide: function () { var c = ui.cat.c; if (!c.hide && ORDER.length <= 2) { toast('Keep at least two in the picker'); return; } c.hide = !c.hide; buildCats(); save(); closeSheet(); toast(c.hide ? 'Hidden. Past spends keep it' : 'Back in the picker'); ACT.catBack(null); },
@@ -1270,13 +1294,13 @@
     importGo: function () {
       var list = ui.importList; if (!list) return; ui.importList = null;
       if (state.onboarded && A.hasSmsPermission()) scan(false);       // read the latest SMS first so more entries match
-      var r = importRows(list); save(); closeSheet(); if (ui.layer) closeFull(); renderA(); confetti(80);
+      var r = importRows(list); save(); closeSheet(); if (ui.layer) closeFull(); renderA(); hap(1);
       toast(r.matched + ' matched · ' + r.added + ' added' + (r.past ? ' · ' + r.past + ' to the Archive' : '') + (r.cats.length ? ' · ' + r.cats.length + ' new categor' + (r.cats.length === 1 ? 'y' : 'ies') : ''));
     },
     importStart: function () { closeSheet(); try { A.pickBackup(); } catch (x) { toast('Importing needs the latest Slate'); } },
     restoreGo: function () {
       var o = ui.restoreData; if (!o) return; ACT.backup(); ui.restoreData = null;
-      for (var k in o) state[k] = o[k]; load2(); rollover(); save(); closeSheet(); closeFull(); applyLook(); renderA(); confetti(90); toast('Restored');
+      for (var k in o) state[k] = o[k]; load2(); rollover(); save(); closeSheet(); closeFull(); applyLook(); renderA(); hap(1); toast('Restored');
     },
     menu: menuSheet,
     go: function (v) { closeSheet(); ACT.tab(v); },

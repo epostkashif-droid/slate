@@ -131,5 +131,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-                    gh release create "unslop-$V" SlateUnslop.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+          gh release create "unslop-$V" SlateUnslop.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "Slate Unslop test $V" --notes "Redesign trial. Installs next to Slate with its own data."

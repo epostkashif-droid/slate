@@ -254,6 +254,8 @@ public class MainActivity extends Activity {
                 e.putInt("day", o.optInt("day", 0));
                 e.putFloat("spentMonth", (float) o.optDouble("spentMonth", 0));
                 e.putFloat("spentToday", (float) o.optDouble("spentToday", 0));
+                e.putFloat("yday", (float) o.optDouble("yday", -1));
+                e.putFloat("wkAvg", (float) o.optDouble("wkAvg", -1));
                 e.putFloat("reserve", (float) o.optDouble("reserve", 0));
                 e.putString("known", o.optString("known", ""));
                 e.putString("fixed", o.optString("fixed", ""));

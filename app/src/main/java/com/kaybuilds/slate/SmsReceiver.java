@@ -63,7 +63,10 @@ public class SmsReceiver extends BroadcastReceiver {
             String month = String.format(Locale.ROOT, "%04d-%02d", c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1);
             int day = c.get(Calendar.YEAR) * 10000 + (c.get(Calendar.MONTH) + 1) * 100 + c.get(Calendar.DAY_OF_MONTH);
             float spentMonth = month.equals(p.getString("month", "")) ? p.getFloat("spentMonth", 0) : 0;
-            float spentToday = day == p.getInt("day", 0) && spentMonth > 0 ? p.getFloat("spentToday", 0) : 0;
+            boolean sameDay = day == p.getInt("day", 0);
+            float spentToday = sameDay && spentMonth > 0 ? p.getFloat("spentToday", 0) : 0;
+            // yesterday / last week figures are only trusted on the day the app worked them out
+            float yday = sameDay ? p.getFloat("yday", -1) : -1, wkAvg = sameDay ? p.getFloat("wkAvg", -1) : -1;
             spentMonth += amt;
             spentToday += amt;
             p.edit().putString("month", month).putInt("day", day).putFloat("spentMonth", spentMonth).putFloat("spentToday", spentToday).apply();
@@ -88,15 +91,12 @@ public class SmsReceiver extends BroadcastReceiver {
 
             float budget = p.getFloat("budget", 0);
             String title = "₹" + money(amt) + (fixedName != null ? " paid · " + fixedName + " ✓" : " spent");
-            String text;
+            String text = "₹" + money(spentToday) + " today" + versus(spentToday, yday, "yesterday") + versus(spentToday, wkAvg, "last week");
             if (budget > 0) {
-                int daysLeft = c.getActualMaximum(Calendar.DAY_OF_MONTH) - c.get(Calendar.DAY_OF_MONTH) + 1;
-                double allowance = Math.max((budget - reserve - (spentMonth - spentToday)) / daysLeft, 0);
-                double leftToday = allowance - spentToday, leftMonth = budget - reserve - spentMonth;
-                text = (leftToday >= 0 ? "₹" + money(leftToday) + " left for today" : "₹" + money(-leftToday) + " over today's limit")
-                        + " · " + (leftMonth >= 0 ? "₹" + money(leftMonth) + " left this month" : "₹" + money(-leftMonth) + " over for the month");
+                double leftMonth = budget - reserve - spentMonth;
+                text += " · " + (leftMonth >= 0 ? "₹" + money(leftMonth) + " left this month" : "₹" + money(-leftMonth) + " over for the month");
             } else {
-                text = "₹" + money(spentToday) + " today · ₹" + money(spentMonth) + " this month";
+                text += " · ₹" + money(spentMonth) + " this month";
             }
 
             boolean known = fixedName != null || OBVIOUS.matcher(body).find();
@@ -184,6 +184,14 @@ public class SmsReceiver extends BroadcastReceiver {
     private static String money(double v) {
         NumberFormat f = NumberFormat.getIntegerInstance(new Locale("en", "IN"));
         return f.format(Math.round(v));
+    }
+
+    /** " · ▲23% vs yesterday", or "" when there is nothing to compare with. */
+    static String versus(double today, double base, String what) {
+        if (base < 0) return "";
+        if (base == 0) return today > 0 ? " · ▲ vs nothing " + what : "";
+        long p = Math.round((today - base) / base * 100);
+        return p == 0 ? " · same as " + what : " · " + (p > 0 ? "▲" : "▼") + Math.abs(p) + "% vs " + what;
     }
 
     /** Amount if this SMS reports money already spent, otherwise 0. */

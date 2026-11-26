@@ -1,8 +1,8 @@
 # Slate
 
-Know what's safe to spend today. Slate reads the transaction SMS your bank already sends, turns a monthly limit into one number for each day, and keeps everything on the phone.
+Know what you spent today, and whether that is up or down. Slate reads the transaction SMS your bank already sends, shows today against yesterday and last week, and keeps everything on the phone.
 
-- **Safe to spend today**, updated after every spend, with EMIs and rent set aside first
+- **Spent today, vs yesterday and last week**: one number updated after every spend, with ▲/▼ % against yesterday and last week's daily average (also in the spend notification); an optional monthly limit with EMIs and rent set aside first
 - **One-tap sorting** of unrecognised spends, straight from the notification
 - **Balances** for bank accounts, credit cards and cash, kept current from the moment you enter them
 - **Fixed payments** and **lent & borrowed** tracking that carry across months

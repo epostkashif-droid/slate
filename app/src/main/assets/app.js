@@ -138,8 +138,33 @@
     var lim = state.budget > 0 ? state.budget / o.dim : 0, run = 0;
     for (i = 1; i <= o.day; i++) { var v = per[i] || 0; if (!v) o.zero++; if (lim && v <= lim) { run++; if (run > o.best) o.best = run; } else run = 0; }
     o.streak = run;
+    var cm = dayCompare(spentToday); o.yday = cm.yday; o.wkAvg = cm.wkAvg; o.vsY = cm.vsY; o.vsW = cm.vsW;
     return o;
   }
+  // today against yesterday and against last week's daily average (reaches into the archive across a month change)
+  function dayCompare(spentToday) {
+    var n = new Date(), t0 = sod(Date.now()), y0 = new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1).getTime(), w0 = new Date(n.getFullYear(), n.getMonth(), n.getDate() - 7).getTime();
+    var from = mkey(new Date(w0)), pool = spends(), first = Infinity;
+    state.archive.forEach(function (e) { if (e.month >= from && Array.isArray(e.txns)) pool = pool.concat(spends(e.txns)); });
+    function early(list) { (list || []).forEach(function (t) { if (t.ts < first) first = t.ts; }); }
+    early(state.txns); state.archive.forEach(function (e) { early(e.txns); });
+    var yday = 0, wk = 0;
+    pool.forEach(function (t) { if (t.ts >= y0 && t.ts < t0) yday += t.amt; if (t.ts >= w0 && t.ts < t0) wk += t.amt; });
+    // a new user with only a few days of history gets the average of those days, not a diluted seven
+    var days = first >= t0 ? 0 : Math.min(7, Math.max(1, Math.round((t0 - sod(Math.max(first, w0))) / 864e5))), wkAvg = days ? wk / days : 0;
+    function vs(a, b) { if (!days) return null; if (b <= 0) return { p: a > 0 ? null : 0, up: a > 0 }; var p = Math.round((a - b) / b * 100); return { p: Math.abs(p), up: p > 0 }; }
+    return { yday: yday, wkAvg: wkAvg, vsY: vs(spentToday, yday), vsW: vs(spentToday, wkAvg) };
+  }
+  function cmpChips(c, cls) {         // "▲ 23% vs yesterday ₹1,200" · "▼ 10% vs last week ₹1,540/day"
+    function one(v, base, what, per) {
+      if (!v) return '';
+      var k = v.p === 0 ? 'eq' : v.up ? 'up' : 'dn', txt = k === 'eq' ? '= same as ' + what : v.p === null ? '▲ vs nothing ' + what : (v.up ? '▲ ' : '▼ ') + v.p + '% vs ' + what;
+      return '<span class="' + k + '">' + txt + (v.p === null ? '' : ' <i>' + inr(base) + per + '</i>') + '</span>';
+    }
+    var h = one(c.vsY, c.yday, 'yesterday', '') + one(c.vsW, c.wkAvg, 'last week', '/day');
+    return h ? '<div class="cmp ' + (cls || '') + '">' + h + '</div>' : '';
+  }
+
   function summary() {
     var c = calc(), sp = spends(), by = {}, cnt = {}, big = null;
     sp.forEach(function (t) { by[t.b] = (by[t.b] || 0) + t.amt; var w = t.who || 'Unknown'; cnt[w] = (cnt[w] || 0) + 1; if (!big || t.amt > big.amt) big = t; });
@@ -156,7 +181,7 @@
   function pushLive() {
     var c = calc(), n = new Date(), known = P.KNOWN_WORDS.concat(Object.keys(state.rules)).filter(function (w) { return w.length >= 4; });
     var fixed = state.fixed.filter(function (f) { return !fxPaid(f) && f.keys && f.keys.length; }).map(function (f) { return f.keys[0] + '\t' + f.name.replace(/[\t\n]/g, ' ') + '\t' + f.amt; });
-    try { A.setLive(JSON.stringify({ notify: !!state.notify, budget: state.budget || 0, month: state.month, day: n.getFullYear() * 10000 + (n.getMonth() + 1) * 100 + n.getDate(), spentMonth: c.spentMonth, spentToday: c.spentToday,
+    try { A.setLive(JSON.stringify({ notify: !!state.notify, budget: state.budget || 0, month: state.month, day: n.getFullYear() * 10000 + (n.getMonth() + 1) * 100 + n.getDate(), spentMonth: c.spentMonth, spentToday: c.spentToday, yday: c.vsY ? c.yday : -1, wkAvg: c.vsW ? c.wkAvg : -1,
       reserve: c.reserve || 0, mute: mutedDigits().join('\n'), known: known.join('\n'), fixed: fixed.join('\n'), top: topBuckets().map(function (k) { return k + '\t' + bk(k)[0] + ' ' + bk(k)[1]; }).join('\n') })); } catch (e) { }
   }
   function save() { clearTimeout(saveT); saveT = setTimeout(function () { try { A.saveData(JSON.stringify(state)); } catch (e) { toast('Could not save'); } pushLive(); }, 120); }
@@ -238,7 +263,7 @@
     var n = toSort().length, bt = balTotals(), fx = fxState(), io = iouTotals();
     function row(act, v, icon, name, meta) { return '<div class="kv" data-act="' + act + '" data-v="' + v + '"><span class="row"><span class="em" style="width:38px;height:38px;border-radius:12px;background:var(--track);display:flex;align-items:center;justify-content:center;font-size:18px">' + icon + '</span><span><b>' + name + '</b>' + (meta ? '<br><span class="mute small">' + meta + '</span>' : '') + '</span></span><span class="mute">›</span></div>'; }
     sheet('<div class="hd"><b>Menu</b><button class="x" data-act="close">✕</button></div><div class="card" style="padding:4px 16px;margin-top:8px">' +
-      row('go', 'today', '☀️', 'Today', 'What is safe to spend') + row('go', 'bals', '💰', 'Balances', bt.set ? inr(bt.have) + ' in hand' + (bt.owe ? ' · ' + inr(bt.owe) + ' on cards' : '') : 'Enter them once') +
+      row('go', 'today', '☀️', 'Today', 'Spent today vs yesterday') + row('go', 'bals', '💰', 'Balances', bt.set ? inr(bt.have) + ' in hand' + (bt.owe ? ' · ' + inr(bt.owe) + ' on cards' : '') : 'Enter them once') +
       row('go', 'month', '📊', mname(state.month), 'Where it went, day by day') + '</div><div class="card" style="padding:4px 16px">' +
       (n ? row('goSort', '', '❓', 'Sort spends', n + ' waiting') : '') + row('goFixed', '', '📌', 'Fixed payments', state.fixed.length ? fx.nPaid + ' of ' + state.fixed.length + ' paid' : 'EMIs, rent, fees') +
       row('goIou', '', '🤝', 'Lent & borrowed', io.n ? io.n + ' open' : 'Track who owes whom') + row('goGoals', '', '🎯', 'Goals & wishlist', goals().length ? inr(goalsSaved()) + ' saved' : 'Save for what you want') + row('goCats', '', '🏷️', 'Categories', state.cats.length + ' · add your own') +
@@ -302,9 +327,9 @@
   function nav() { if (look() === 'sway') navSway(); else navClassic(); }
   function viewToday() { return look() === 'sway' ? viewTodaySway() : viewTodayClassic(); }
   function heroRing(c) {        // Paper: one ring, one number
-    var plain = c.mood === 'plain', used = plain ? 0 : c.allow > 0 ? Math.min(c.spentToday / c.allow, 1) : 1, C = 2 * Math.PI * 96, v = plain ? c.spentToday : Math.abs(c.leftToday);
+    var plain = c.mood === 'plain', used = plain ? 0 : c.allow > 0 ? Math.min(c.spentToday / c.allow, 1) : 1, C = 2 * Math.PI * 96, v = c.spentToday;
     return '<div class="ringhero ' + c.mood + '"><svg viewBox="0 0 220 220"><circle class="t" cx="110" cy="110" r="96"/><circle class="f" cx="110" cy="110" r="96" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (ui.anim ? C : C * (1 - used)).toFixed(1) + '" data-to="' + (C * (1 - used)).toFixed(1) + '"/></svg>' +
-      '<div class="in"><div class="lbl">' + (plain ? 'Spent today' : c.leftToday >= 0 ? 'Safe to spend today' : 'Over today by') + '</div><div class="big num" data-count="' + v + '">' + inr(v) + '</div><div class="sub">' + (plain ? inr(c.spentMonth) + ' this month' : c.leftMonth >= 0 ? inr(c.leftMonth) + ' · ' + c.daysLeft + ' day' + (c.daysLeft === 1 ? '' : 's') + ' left' : inr(-c.leftMonth) + ' over this month') + '</div></div></div>' +
+      '<div class="in"><div class="lbl">Spent today</div><div class="big num" data-count="' + v + '">' + inr(v) + '</div><div class="sub">' + (plain ? inr(c.spentMonth) + ' this month' : c.leftMonth >= 0 ? inr(c.leftMonth) + ' · ' + c.daysLeft + ' day' + (c.daysLeft === 1 ? '' : 's') + ' left' : inr(-c.leftMonth) + ' over this month') + '</div></div></div>' + cmpChips(c, 'center') +
       (plain ? '<button class="btn dark" style="margin-bottom:14px" data-act="budget">Set a monthly limit</button>' : c.reserve > 0 ? '<div class="mute small" style="text-align:center;margin:-4px 0 14px">' + inr(c.reserve) + ' set aside for fixed payments</div>' : '');
   }
   function weekStrip(c) {       // Glow: the last seven days inside the hero
@@ -329,13 +354,12 @@
     if (look() === 'paper') return heroRing(c);
     var h = '<div class="hero ' + c.mood + '">';
     if (c.mood === 'plain') {
-      h += '<div class="lbl">Spent today</div><div class="big num" data-count="' + c.spentToday + '">' + inr(c.spentToday) + '</div><div class="sub">' + inr(c.spentMonth) + ' so far in ' + mname(state.month) + '</div>' +
-        '<button class="cta" data-act="budget">Set a monthly limit to see what is safe to spend</button>';
+      h += '<div class="lbl">Spent today</div><div class="big num" data-count="' + c.spentToday + '">' + inr(c.spentToday) + '</div>' + cmpChips(c) + '<div class="sub">' + inr(c.spentMonth) + ' so far in ' + mname(state.month) + '</div>' +
+        '<button class="cta" data-act="budget">Set a monthly limit to track what is left</button>';
     } else {
       var used = c.allow > 0 ? Math.min(c.spentToday / c.allow, 1) : 1, C = 2 * Math.PI * 30;
       h += '<div class="ring"><svg viewBox="0 0 70 70"><circle class="t" cx="35" cy="35" r="30"/><circle class="f" cx="35" cy="35" r="30" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (ui.anim ? C : C * (1 - used)).toFixed(1) + '" data-to="' + (C * (1 - used)).toFixed(1) + '"/></svg><b>' + Math.round(used * 100) + '%</b></div>';
-      if (c.leftToday >= 0) h += '<div class="lbl">Safe to spend today</div><div class="big num" data-count="' + c.leftToday + '">' + inr(c.leftToday) + '</div>';
-      else h += '<div class="lbl">Over today\'s limit by</div><div class="big num" data-count="' + (-c.leftToday) + '">' + inr(-c.leftToday) + '</div>';
+      h += '<div class="lbl">Spent today</div><div class="big num" data-count="' + c.spentToday + '">' + inr(c.spentToday) + '</div>' + cmpChips(c);
       h += '<div class="sub">' + (c.leftMonth >= 0 ? inr(c.leftMonth) + ' left for ' + c.daysLeft + ' day' + (c.daysLeft === 1 ? '' : 's') : inr(-c.leftMonth) + ' over your limit this month') +
         (c.leftToday < 0 && c.leftMonth >= 0 && c.daysLeft > 1 ? ' · tomorrow ' + inr(c.tomorrow) : '') + (c.reserve > 0 ? '<br>' + inr(c.reserve) + ' set aside for fixed payments' : '') + '</div>' +
         '<div class="bar"><i style="width:' + (ui.anim ? 0 : Math.min(c.spentMonth / c.budget, 1) * 100).toFixed(1) + '%" data-w="' + (Math.min(c.spentMonth / c.budget, 1) * 100).toFixed(1) + '"></i></div>';
@@ -345,10 +369,10 @@
   }
   function viewTodaySway() {
     var c = calc(), n = new Date(), ts = toSort(), today = sod(Date.now()), h, label, title, cls = '';
-    if (c.mood === 'plain') { label = DOW[n.getDay()] + ' ' + n.getDate() + ' · spent today'; title = inr(c.spentToday); }
-    else if (c.leftToday >= 0) { label = DOW[n.getDay()] + ' ' + n.getDate() + ' · safe to spend'; title = inr(c.leftToday); cls = c.mood === 'tight' ? 'amber' : ''; }
-    else { label = DOW[n.getDay()] + ' ' + n.getDate() + ' · over today by'; title = inr(-c.leftToday); cls = 'red'; }
+    label = DOW[n.getDay()] + ' ' + n.getDate() + ' · spent today'; title = inr(c.spentToday);
+    cls = c.mood === 'over' ? 'red' : c.mood === 'tight' ? 'amber' : '';
     var sub = c.mood === 'plain' ? inr(c.spentMonth) + ' so far in ' + mname(state.month) : (c.leftMonth >= 0 ? inr(c.leftMonth) + ' left for ' + c.daysLeft + ' day' + (c.daysLeft === 1 ? '' : 's') : inr(-c.leftMonth) + ' over this month') + (c.streak ? ' · 🔥 ' + c.streak : '');
+    sub = cmpChips(c, 'center') + sub;
     h = head(label, title, sub, cls);
     if (c.mood === 'plain') h += '<div style="text-align:center;margin:-6px 0 14px"><button class="btn pri" style="display:inline-block;width:auto" data-act="budget">Set a monthly limit</button></div>';
     h += '<div class="tl">' + rail(c) + '<div class="col"><div class="swg">' + glance(c) + capChips() + goalsStrip(c) + '</div>';
@@ -1062,7 +1086,7 @@
   function fixedLayer() {
     var fx = fxState(), h = '<div class="row"><b class="grow" style="font-size:18px">Fixed payments</b><button class="x" data-act="closeFull">✕</button></div>';
     h += '<div class="card" style="margin-top:14px"><div class="row"><span class="grow mute small" style="font-weight:700">' + mname(state.month).toUpperCase() + '</span><span class="mute small">' + fx.nPaid + ' of ' + state.fixed.length + ' paid</span></div><div class="num" style="font-size:30px;font-weight:800">' + inr(fx.reserve) + ' <span class="mute" style="font-size:15px;font-weight:600">still to go</span></div>' +
-      '<div class="prog"><i style="width:' + (fx.total ? fx.paid / fx.total * 100 : 0).toFixed(1) + '%"></i></div><div class="small mute">Unpaid ones are set aside first, so "safe to spend today" never eats into your EMIs or rent.</div></div>';
+      '<div class="prog"><i style="width:' + (fx.total ? fx.paid / fx.total * 100 : 0).toFixed(1) + '%"></i></div><div class="small mute">Unpaid ones are set aside first, so your monthly limit never eats into your EMIs or rent.</div></div>';
     if (state.fixed.length) h += '<div class="card" style="padding:4px 16px">' + state.fixed.slice().sort(function (a, b) { return (a.day || 99) - (b.day || 99); }).map(function (f) {
       var st = fxStatus(f); return '<div class="tx" data-act="fxOpen" data-v="' + esc(f.id) + '"><div class="em">' + (st[1] === 'ok' ? '✅' : st[1] === 'bad' ? '⏰' : '📌') + '</div><div class="grow"><div class="who ell">' + esc(f.name) + '</div><div class="meta" style="' + (st[1] === 'bad' ? 'color:var(--red)' : '') + '">' + st[0] + '</div></div><div class="amt num">' + inr(f.amt) + '</div></div>';
     }).join('') + '</div>';

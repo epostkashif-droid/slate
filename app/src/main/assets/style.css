@@ -512,3 +512,13 @@ body[data-look=paper] .dkb, body[data-look=paper] .dkl button { border-radius: 5
 @keyframes bob { 50% { transform: translateY(-4px) rotate(-6deg); } }
 .ft i.goal { background: #f2b544; }
 body[data-look=paper] .ghero { background: var(--ink); color: var(--bg); }
+
+/* spent today vs yesterday / last week */
+.cmp { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
+.cmp.center { justify-content: center; margin: 2px 0 10px; }
+.cmp span { display: inline-flex; align-items: baseline; gap: 5px; font-size: 12.5px; font-weight: 700; padding: 5px 10px; border-radius: 13px; background: var(--track); color: var(--ink); }
+.cmp span i { font-style: normal; font-weight: 600; opacity: .65; }
+.cmp .up { color: var(--red); } .cmp .dn { color: #1f9d63; }
+.hero .cmp span { background: rgba(255,255,255,.18); color: #fff; }
+body[data-look=paper] .cmp span { border-radius: 0; background: none; border: 1px solid var(--line); }
+body[data-look=glow] .cmp .dn { color: #4fe3c1; }
